@@ -1,0 +1,53 @@
+name: Test create Container App from YAML config only
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      FAKE_AZ_APP_EXISTS: 'false'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI and YAML config
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          LOG="$RUNNER_TEMP/az-calls.log"
+          : > "$LOG"
+          cat > "$RUNNER_TEMP/fakebin/az" <<EOF
+          #!/bin/bash
+          echo "az \$*" >> "$LOG"
+          case "\$*" in
+            "containerapp show"*)
+              if [ "\$FAKE_AZ_APP_EXISTS" = "true" ]; then exit 0; else exit 1; fi ;;
+          esac
+          exit 0
+          EOF
+          chmod +x "$RUNNER_TEMP/fakebin/az"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+          printf 'properties:\n  template:\n    containers:\n      - image: myacr.azurecr.io/app:1.0\n        name: app\n' > "$RUNNER_TEMP/app.yaml"
+      - id: action
+        uses: .
+        with:
+          yamlConfigPath: ${{ runner.temp }}/app.yaml
+          containerAppName: yaml-app
+          resourceGroup: yaml-rg
+          disableTelemetry: 'true'
+      - name: Assert az containerapp create --yaml was called
+        run: |
+          LOG="$RUNNER_TEMP/az-calls.log"
+          cat "$LOG"
+          LINE=$(grep '^az containerapp create' "$LOG" || true)
+          echo "create call: $LINE"
+          if [ -z "$LINE" ]; then echo "FAIL: create not called"; exit 1; fi
+          for expected in "-g yaml-rg" "-n yaml-app" "--yaml $RUNNER_TEMP/app.yaml"; do
+            if ! echo "$LINE" | grep -qF -- "$expected"; then
+              echo "FAIL: missing '$expected'"; exit 1
+            fi
+          done
+          if echo "$LINE" | grep -qF -- "--ingress"; then
+            echo "FAIL: ingress args should not be passed with YAML config"; exit 1
+          fi
+          if grep -q '^az containerapp env' "$LOG"; then
+            echo "FAIL: environment checks should be skipped with YAML config"; exit 1
+          fi
+          echo "PASS"

@@ -1,0 +1,68 @@
+name: Test update existing app via 'up' with ACR credentials, ingress and target port
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az and docker CLIs
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          : > "$RUNNER_TEMP/az-calls.log"
+          : > "$RUNNER_TEMP/docker-calls.log"
+          cat > "$RUNNER_TEMP/fakebin/az" <<'EOF'
+          #!/bin/bash
+          echo "az $*" >> "$RUNNER_TEMP/az-calls.log"
+          case "$*" in
+            "containerapp show"*) exit 0 ;;
+          esac
+          exit 0
+          EOF
+          cat > "$RUNNER_TEMP/fakebin/docker" <<'EOF'
+          #!/bin/bash
+          echo "docker $*" >> "$RUNNER_TEMP/docker-calls.log"
+          case "$1" in
+            login) cat > /dev/null 2>&1 || true; echo "Login Succeeded" ;;
+          esac
+          exit 0
+          EOF
+          chmod +x "$RUNNER_TEMP/fakebin/az" "$RUNNER_TEMP/fakebin/docker"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          imageToDeploy: myacr.azurecr.io/app:3.0
+          containerAppName: test-app
+          resourceGroup: test-rg
+          acrName: myacr
+          acrUsername: myuser
+          acrPassword: mypass
+          ingress: internal
+          targetPort: '3000'
+          disableTelemetry: 'true'
+      - name: Assert az containerapp up was called with expected args
+        run: |
+          LOG="$RUNNER_TEMP/az-calls.log"
+          cat "$LOG"
+          LINE=$(grep -E '^az containerapp up( |$)' "$LOG" || true)
+          echo "up call: $LINE"
+          if [ -z "$LINE" ]; then echo "FAIL: up not called"; exit 1; fi
+          for expected in "-g test-rg" "-n test-app" "-i myacr.azurecr.io/app:3.0" "--target-port 3000" "--ingress internal" "--registry-server myacr.azurecr.io" "--registry-username myuser" "--registry-password mypass"; do
+            if ! echo "$LINE" | grep -qF -- "$expected"; then
+              echo "FAIL: missing '$expected'"; exit 1
+            fi
+          done
+          if grep -q '^az containerapp create' "$LOG"; then
+            echo "FAIL: create should not be called for existing app"; exit 1
+          fi
+          if grep -q '^az containerapp update' "$LOG"; then
+            echo "FAIL: update should not be called when ingress/targetPort given"; exit 1
+          fi
+          if grep -q '^az containerapp registry set' "$LOG"; then
+            echo "FAIL: registry set should not be called when using up"; exit 1
+          fi
+          if grep -q '^az acr login' "$LOG"; then
+            echo "FAIL: az acr login should not be used when credentials are provided"; exit 1
+          fi
+          echo "PASS"

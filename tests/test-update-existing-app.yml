@@ -1,0 +1,53 @@
+name: Test update existing Container App
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      FAKE_AZ_APP_EXISTS: 'true'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          LOG="$RUNNER_TEMP/az-calls.log"
+          : > "$LOG"
+          cat > "$RUNNER_TEMP/fakebin/az" <<EOF
+          #!/bin/bash
+          echo "az \$*" >> "$LOG"
+          case "\$*" in
+            "containerapp show"*)
+              if [ "\$FAKE_AZ_APP_EXISTS" = "true" ]; then exit 0; else exit 1; fi ;;
+          esac
+          exit 0
+          EOF
+          chmod +x "$RUNNER_TEMP/fakebin/az"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          imageToDeploy: myacr.azurecr.io/app:2.0
+          containerAppName: test-app
+          resourceGroup: test-rg
+          environmentVariables: FOO=bar
+          disableTelemetry: 'true'
+      - name: Assert az containerapp update was called with expected args
+        run: |
+          LOG="$RUNNER_TEMP/az-calls.log"
+          cat "$LOG"
+          LINE=$(grep '^az containerapp update' "$LOG" || true)
+          echo "update call: $LINE"
+          if [ -z "$LINE" ]; then echo "FAIL: update not called"; exit 1; fi
+          for expected in "-g test-rg" "-n test-app" "-i myacr.azurecr.io/app:2.0" "--replace-env-vars FOO=bar"; do
+            if ! echo "$LINE" | grep -qF -- "$expected"; then
+              echo "FAIL: missing '$expected'"; exit 1
+            fi
+          done
+          if grep -q '^az containerapp create' "$LOG"; then
+            echo "FAIL: create should not be called for existing app"; exit 1
+          fi
+          if grep -qE '^az containerapp up( |$)' "$LOG"; then
+            echo "FAIL: up should not be called without ingress/targetPort"; exit 1
+          fi
+          echo "PASS"

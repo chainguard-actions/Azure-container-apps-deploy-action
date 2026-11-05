@@ -1,0 +1,53 @@
+name: Test create Container App from existing image
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      FAKE_AZ_APP_EXISTS: 'false'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          LOG="$RUNNER_TEMP/az-calls.log"
+          : > "$LOG"
+          cat > "$RUNNER_TEMP/fakebin/az" <<EOF
+          #!/bin/bash
+          echo "az \$*" >> "$LOG"
+          case "\$*" in
+            "containerapp show"*)
+              if [ "\$FAKE_AZ_APP_EXISTS" = "true" ]; then exit 0; else exit 1; fi ;;
+          esac
+          exit 0
+          EOF
+          chmod +x "$RUNNER_TEMP/fakebin/az"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          imageToDeploy: myacr.azurecr.io/app:1.0
+          containerAppName: test-app
+          resourceGroup: test-rg
+          containerAppEnvironment: test-env
+          disableTelemetry: 'true'
+      - name: Assert az containerapp create was called with expected args
+        run: |
+          LOG="$RUNNER_TEMP/az-calls.log"
+          cat "$LOG"
+          LINE=$(grep '^az containerapp create' "$LOG" || true)
+          echo "create call: $LINE"
+          if [ -z "$LINE" ]; then echo "FAIL: create not called"; exit 1; fi
+          for expected in "-g test-rg" "-n test-app" "-i myacr.azurecr.io/app:1.0" "--environment test-env" "--ingress external" "--target-port 80"; do
+            if ! echo "$LINE" | grep -qF -- "$expected"; then
+              echo "FAIL: missing '$expected'"; exit 1
+            fi
+          done
+          if grep -q '^az containerapp update' "$LOG"; then
+            echo "FAIL: update should not be called for new app"; exit 1
+          fi
+          if grep -q '^az group create' "$LOG"; then
+            echo "FAIL: resource group should not be created when provided"; exit 1
+          fi
+          echo "PASS"
