@@ -9,6 +9,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 
 | Version | Tag | Upstream commit | Hardening report |
 |---------|-----|-----------------|------------------|
+| v0 | [`v0`](https://github.com/chainguard-actions/Azure-container-apps-deploy-action/tree/v0) | [`c52978e`](https://github.com/Azure/container-apps-deploy-action/commit/c52978e9aeef0fcaa4dcd894b475b780e3f6441d) | [`HARDENING.md`](https://github.com/chainguard-actions/Azure-container-apps-deploy-action/blob/v0/HARDENING.md) |
 | v1 | [`v1`](https://github.com/chainguard-actions/Azure-container-apps-deploy-action/tree/v1) | [`29ee198`](https://github.com/Azure/container-apps-deploy-action/commit/29ee19866ec987ededd70b8412d9ee241a9102d1) | [`HARDENING.md`](https://github.com/chainguard-actions/Azure-container-apps-deploy-action/blob/v1/HARDENING.md) |
 | v2 | [`v2`](https://github.com/chainguard-actions/Azure-container-apps-deploy-action/tree/v2) | [`8dff69d`](https://github.com/Azure/container-apps-deploy-action/commit/8dff69dac3367c32ceb2690d8f13adbeab462703) | [`HARDENING.md`](https://github.com/chainguard-actions/Azure-container-apps-deploy-action/blob/v2/HARDENING.md) |
 
