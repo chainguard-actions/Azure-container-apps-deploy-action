@@ -1,0 +1,57 @@
+name: Test building from custom Dockerfile with ACR token login (fake az and docker)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az / docker and app source
+        run: |
+          mkdir -p /tmp/fakebin /tmp/app
+          : > /tmp/az-calls.log
+          : > /tmp/docker-calls.log
+          cat > /tmp/fakebin/az <<'EOF'
+          #!/bin/bash
+          echo "az $*" >> /tmp/az-calls.log
+          case "$*" in
+            "acr login"*) echo '{"accessToken":"tok123","loginServer":"myacr.azurecr.io"}' ;;
+            "containerapp show"*) exit 3 ;;
+            "containerapp env show"*) exit 3 ;;
+          esac
+          exit 0
+          EOF
+          cat > /tmp/fakebin/docker <<'EOF'
+          #!/bin/bash
+          echo "docker $*" >> /tmp/docker-calls.log
+          exit 0
+          EOF
+          chmod +x /tmp/fakebin/az /tmp/fakebin/docker
+          echo "/tmp/fakebin" >> "$GITHUB_PATH"
+          printf 'FROM scratch\n' > /tmp/app/Dockerfile.custom
+      - id: action
+        uses: .
+        with:
+          appSourcePath: /tmp/app
+          dockerfilePath: Dockerfile.custom
+          acrName: myacr
+          imageToBuild: myacr.azurecr.io/custom-app:v1
+          containerAppName: df-app
+          resourceGroup: df-rg
+          containerAppEnvironment: df-env
+          disableTelemetry: 'true'
+      - name: Assert calls
+        run: |
+          echo "--- az calls ---"; cat /tmp/az-calls.log
+          echo "--- docker calls ---"; cat /tmp/docker-calls.log
+          grep -qF "az acr login --name myacr" /tmp/az-calls.log || { echo "FAIL: acr login not called"; exit 1; }
+          grep -qF "docker login myacr.azurecr.io -u 00000000-0000-0000-0000-000000000000 -p tok123" /tmp/docker-calls.log || { echo "FAIL: docker login with token not called"; exit 1; }
+          grep -qF "docker build --tag myacr.azurecr.io/custom-app:v1 --file /tmp/app/Dockerfile.custom /tmp/app" /tmp/docker-calls.log || { echo "FAIL: docker build with custom Dockerfile not called"; exit 1; }
+          grep -qF "docker push myacr.azurecr.io/custom-app:v1" /tmp/docker-calls.log || { echo "FAIL: docker push not called"; exit 1; }
+          line="$(grep -E '^az containerapp create' /tmp/az-calls.log || true)"
+          echo "create: $line"
+          [ -n "$line" ] || { echo "FAIL: create not called"; exit 1; }
+          for exp in "-g df-rg" "-n df-app" "-i myacr.azurecr.io/custom-app:v1" "--environment df-env" "--ingress external" "--target-port 80"; do
+            echo "$line" | grep -qF -- "$exp" || { echo "FAIL: missing '$exp'"; exit 1; }
+          done
+          echo "PASS"

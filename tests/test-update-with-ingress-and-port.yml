@@ -1,0 +1,42 @@
+name: Test updating existing Container App via 'up' with ingress and target port (fake az)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p /tmp/fakebin
+          : > /tmp/az-calls.log
+          cat > /tmp/fakebin/az <<'EOF'
+          #!/bin/bash
+          echo "az $*" >> /tmp/az-calls.log
+          exit 0
+          EOF
+          chmod +x /tmp/fakebin/az
+          echo "/tmp/fakebin" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          imageToDeploy: myregistry.example.com/app:4.0
+          containerAppName: my-app
+          resourceGroup: my-rg
+          ingress: internal
+          targetPort: '8080'
+          disableTelemetry: 'true'
+      - name: Assert az calls
+        run: |
+          echo "--- az calls ---"
+          cat /tmp/az-calls.log
+          line="$(grep -E '^az containerapp up' /tmp/az-calls.log || true)"
+          echo "up: $line"
+          [ -n "$line" ] || { echo "FAIL: up not called"; exit 1; }
+          for exp in "-g my-rg" "-n my-app" "-i myregistry.example.com/app:4.0" "--target-port 8080" "--ingress internal"; do
+            echo "$line" | grep -qF -- "$exp" || { echo "FAIL: missing '$exp'"; exit 1; }
+          done
+          if grep -q "az containerapp update" /tmp/az-calls.log; then echo "FAIL: update should not be called"; exit 1; fi
+          if grep -q "az containerapp create" /tmp/az-calls.log; then echo "FAIL: create should not be called"; exit 1; fi
+          if grep -q "az containerapp ingress disable" /tmp/az-calls.log; then echo "FAIL: ingress should not be disabled"; exit 1; fi
+          echo "PASS"

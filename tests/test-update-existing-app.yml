@@ -1,0 +1,36 @@
+name: Test update of existing Container App with prebuilt image (fake az)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p /tmp/fakebin
+          : > /tmp/az-calls.log
+          cat > /tmp/fakebin/az <<'EOF'
+          #!/bin/bash
+          echo "az $*" >> /tmp/az-calls.log
+          exit 0
+          EOF
+          chmod +x /tmp/fakebin/az
+          echo "/tmp/fakebin" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          imageToDeploy: myregistry.example.com/app:1.0
+          containerAppName: my-app
+          resourceGroup: my-rg
+          disableTelemetry: 'true'
+      - name: Assert az calls
+        run: |
+          echo "--- az calls ---"
+          cat /tmp/az-calls.log
+          grep -q "az config set extension.use_dynamic_install=yes_without_prompt" /tmp/az-calls.log || { echo "FAIL: config not set"; exit 1; }
+          grep -qE "az containerapp show -g my-rg -n my-app" /tmp/az-calls.log || { echo "FAIL: show not called"; exit 1; }
+          grep -qE "az containerapp update -g my-rg -n my-app -i myregistry.example.com/app:1.0" /tmp/az-calls.log || { echo "FAIL: update not called with image"; exit 1; }
+          if grep -q "az containerapp create" /tmp/az-calls.log; then echo "FAIL: create should not be called"; exit 1; fi
+          if grep -q "az group" /tmp/az-calls.log; then echo "FAIL: group commands should not be called when resourceGroup given"; exit 1; fi
+          echo "PASS"
