@@ -1,0 +1,67 @@
+name: Test build from custom Dockerfile and push to generic registry (fake az/docker)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az and docker CLIs and app source
+        run: |
+          mkdir -p /tmp/fakebin /tmp/docker-src
+          : > /tmp/az-calls.log
+          : > /tmp/docker-calls.log
+          cat > /tmp/fakebin/az <<'EOF'
+          #!/bin/bash
+          echo "az $*" >> /tmp/az-calls.log
+          case "$*" in
+            "containerapp show"*) exit 3 ;;
+            "containerapp env show"*) exit 3 ;;
+          esac
+          exit 0
+          EOF
+          cat > /tmp/fakebin/docker <<'EOF'
+          #!/bin/bash
+          echo "docker $*" >> /tmp/docker-calls.log
+          case "$*" in
+            *--password-stdin*) cat > /dev/null ;;
+          esac
+          case "$1" in
+            login) echo "Login Succeeded" ;;
+          esac
+          exit 0
+          EOF
+          chmod +x /tmp/fakebin/az /tmp/fakebin/docker
+          echo "/tmp/fakebin" >> "$GITHUB_PATH"
+          printf 'FROM nginx:alpine\n' > /tmp/docker-src/Dockerfile.custom
+      - id: action
+        uses: .
+        with:
+          appSourcePath: /tmp/docker-src
+          dockerfilePath: Dockerfile.custom
+          registryUrl: myregistry.example.com
+          registryUsername: reg-user
+          registryPassword: reg-pass
+          imageToBuild: myregistry.example.com/web:4.0
+          containerAppName: docker-app
+          resourceGroup: docker-rg
+          containerAppEnvironment: docker-env
+          ingress: external
+          targetPort: '3000'
+          disableTelemetry: 'true'
+      - name: Assert calls
+        run: |
+          echo "--- az calls ---"
+          cat /tmp/az-calls.log
+          echo "--- docker calls ---"
+          cat /tmp/docker-calls.log
+          grep -E '^docker login' /tmp/docker-calls.log | grep -qF "myregistry.example.com" || { echo "FAIL: docker login not performed"; exit 1; }
+          grep -qF "docker build --tag myregistry.example.com/web:4.0 --file /tmp/docker-src/Dockerfile.custom /tmp/docker-src" /tmp/docker-calls.log || { echo "FAIL: docker build not called as expected"; exit 1; }
+          grep -qF "docker push myregistry.example.com/web:4.0" /tmp/docker-calls.log || { echo "FAIL: docker push not called"; exit 1; }
+          line="$(grep -E '^az containerapp create' /tmp/az-calls.log || true)"
+          echo "create: $line"
+          [ -n "$line" ] || { echo "FAIL: create not called"; exit 1; }
+          for exp in "-g docker-rg" "-n docker-app" "-i myregistry.example.com/web:4.0" "--environment docker-env" "--ingress external" "--target-port 3000" "--registry-server myregistry.example.com" "--registry-username reg-user" "--registry-password reg-pass"; do
+            echo "$line" | grep -qF -- "$exp" || { echo "FAIL: missing '$exp'"; exit 1; }
+          done
+          echo "PASS"

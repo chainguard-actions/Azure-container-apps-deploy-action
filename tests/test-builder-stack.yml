@@ -1,0 +1,108 @@
+name: Test Oryx++ builder path with custom builderStack and runtimeStack (fake az/docker/pack)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake CLIs and app source
+        run: |
+          mkdir -p /tmp/fakebin /tmp/app-src /tmp/pack-pkg
+          : > /tmp/az-calls.log
+          : > /tmp/docker-calls.log
+          : > /tmp/pack-calls.log
+          cat > /tmp/fakebin/az <<'EOF'
+          #!/bin/bash
+          echo "az $*" >> /tmp/az-calls.log
+          case "$*" in
+            "containerapp show"*) exit 3 ;;
+            "containerapp env show"*) exit 3 ;;
+          esac
+          exit 0
+          EOF
+          cat > /tmp/fakebin/docker <<'EOF'
+          #!/bin/bash
+          echo "docker $*" >> /tmp/docker-calls.log
+          case "$*" in
+            *--password-stdin*) cat > /dev/null ;;
+          esac
+          case "$1" in
+            login) echo "Login Succeeded" ;;
+          esac
+          exit 0
+          EOF
+          cat > /tmp/fakebin/pack <<'EOF'
+          #!/bin/bash
+          echo "pack $*" >> /tmp/pack-calls.log
+          exit 0
+          EOF
+          cat > /tmp/fakebin/sudo <<'EOF'
+          #!/bin/bash
+          exec "$@"
+          EOF
+          # Fake pack tarball served by fake curl (supports stdout and -o FILE)
+          cp /tmp/fakebin/pack /tmp/pack-pkg/pack
+          tar czf /tmp/pack.tgz -C /tmp/pack-pkg pack
+          cat > /tmp/fakebin/curl <<'EOF'
+          #!/bin/sh
+          out=""
+          prev=""
+          for arg in "$@"; do
+            case "$prev" in
+              -o|--output) out="$arg" ;;
+            esac
+            prev="$arg"
+          done
+          case "$*" in
+            *buildpacks/pack*)
+              if [ -n "$out" ]; then
+                cat /tmp/pack.tgz > "$out"
+              else
+                cat /tmp/pack.tgz
+              fi
+              exit 0
+              ;;
+          esac
+          exec /usr/bin/curl "$@"
+          EOF
+          chmod +x /tmp/fakebin/*
+          echo "/tmp/fakebin" >> "$GITHUB_PATH"
+          printf 'print("hello")\n' > /tmp/app-src/app.py
+      - id: action
+        uses: .
+        with:
+          appSourcePath: /tmp/app-src
+          registryUrl: myregistry.example.com
+          registryUsername: reg-user
+          registryPassword: reg-pass
+          imageToBuild: myregistry.example.com/builder-app:5.0
+          builderStack: debian-bookworm-20231107.2
+          runtimeStack: python:3.11
+          containerAppName: builder-app
+          resourceGroup: builder-rg
+          containerAppEnvironment: builder-env
+          disableTelemetry: 'true'
+      - name: Assert calls
+        run: |
+          echo "--- pack calls ---"
+          cat /tmp/pack-calls.log
+          echo "--- docker calls ---"
+          cat /tmp/docker-calls.log
+          echo "--- az calls ---"
+          cat /tmp/az-calls.log
+          line="$(grep -E '^pack build' /tmp/pack-calls.log || true)"
+          echo "build: $line"
+          [ -n "$line" ] || { echo "FAIL: pack build not called"; exit 1; }
+          [ "$(grep -cE '^pack build' /tmp/pack-calls.log)" = "1" ] || { echo "FAIL: expected exactly one pack build"; exit 1; }
+          for exp in "myregistry.example.com/builder-app:5.0" "--path /tmp/app-src" "--builder mcr.microsoft.com/oryx/builder:debian-bookworm-20231107.2" "--env ORYX_PLATFORM_NAME=python" "--env ORYX_PLATFORM_VERSION=3.11" "--env ORYX_RUNTIME_PORT=80" "--env ORYX_DISABLE_TELEMETRY=true"; do
+            echo "$line" | grep -qF -- "$exp" || { echo "FAIL: pack build missing '$exp'"; exit 1; }
+          done
+          grep -qF "docker push myregistry.example.com/builder-app:5.0" /tmp/docker-calls.log || { echo "FAIL: docker push not called"; exit 1; }
+          if grep -q "^docker build" /tmp/docker-calls.log; then echo "FAIL: docker build should not run without Dockerfile"; exit 1; fi
+          create="$(grep -E '^az containerapp create' /tmp/az-calls.log || true)"
+          echo "create: $create"
+          for exp in "-n builder-app" "-i myregistry.example.com/builder-app:5.0" "--target-port 80" "--ingress external"; do
+            echo "$create" | grep -qF -- "$exp" || { echo "FAIL: create missing '$exp'"; exit 1; }
+          done
+          echo "PASS"

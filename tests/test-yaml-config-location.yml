@@ -1,4 +1,4 @@
-name: Test creating Container App from YAML config with location and generated resource group (fake az)
+name: Test YAML config only deployment with location and generated resource group (fake az)
 on:
   workflow_dispatch:
 jobs:
@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Install fake az CLI and YAML config
+      - name: Install fake az CLI and write YAML config
         run: |
           mkdir -p /tmp/fakebin
           : > /tmp/az-calls.log
@@ -16,6 +16,7 @@ jobs:
           case "$*" in
             "group show"*) exit 3 ;;
             "containerapp show"*) exit 3 ;;
+            "containerapp env show"*) exit 3 ;;
           esac
           exit 0
           EOF
@@ -25,24 +26,24 @@ jobs:
           properties:
             template:
               containers:
-                - image: myregistry.example.com/app:3.0
-                  name: app
+                - image: myregistry.example.com/app:yaml
+                  name: yaml-app
           EOF
       - id: action
         uses: .
         with:
           yamlConfigPath: /tmp/containerapp.yaml
-          location: eastus
           containerAppName: yaml-app
+          location: westus2
           disableTelemetry: 'true'
       - name: Assert az calls
         run: |
           echo "--- az calls ---"
           cat /tmp/az-calls.log
           grep -qF "az group show -n yaml-app-rg" /tmp/az-calls.log || { echo "FAIL: group show not called"; exit 1; }
-          grep -qF "az group create -n yaml-app-rg -l eastus" /tmp/az-calls.log || { echo "FAIL: group create with location not called"; exit 1; }
-          if grep -q "az provider show" /tmp/az-calls.log; then echo "FAIL: provider show should not be called when location given"; exit 1; fi
-          grep -qF "az containerapp create -g yaml-app-rg -n yaml-app --yaml /tmp/containerapp.yaml" /tmp/az-calls.log || { echo "FAIL: create from yaml not called"; exit 1; }
-          if grep -q "az containerapp env" /tmp/az-calls.log; then echo "FAIL: env commands should not run in YAML mode"; exit 1; fi
+          grep -qF "az group create -n yaml-app-rg -l westus2" /tmp/az-calls.log || { echo "FAIL: group create with location not called"; exit 1; }
+          if grep -q "az provider show" /tmp/az-calls.log; then echo "FAIL: default location should not be looked up"; exit 1; fi
+          grep -qF "az containerapp create -g yaml-app-rg -n yaml-app --yaml /tmp/containerapp.yaml --output none" /tmp/az-calls.log || { echo "FAIL: yaml create not called"; exit 1; }
+          if grep -q "az containerapp env" /tmp/az-calls.log; then echo "FAIL: env commands should be skipped with YAML"; exit 1; fi
           if grep -q "az containerapp update" /tmp/az-calls.log; then echo "FAIL: update should not be called"; exit 1; fi
           echo "PASS"
