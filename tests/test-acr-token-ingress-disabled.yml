@@ -1,0 +1,65 @@
+name: Test ACR token login and disabling ingress on existing Container App
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az and docker CLIs
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          AZLOG="$RUNNER_TEMP/az-calls.log"
+          DLOG="$RUNNER_TEMP/docker-calls.log"
+          : > "$AZLOG"
+          : > "$DLOG"
+          cat > "$RUNNER_TEMP/fakebin/az" <<EOF
+          #!/bin/bash
+          echo "az \$*" >> "$AZLOG"
+          case "\$*" in
+            "acr login"*) echo '{"accessToken":"faketoken123"}' ;;
+          esac
+          exit 0
+          EOF
+          cat > "$RUNNER_TEMP/fakebin/docker" <<EOF
+          #!/bin/bash
+          echo "docker \$*" >> "$DLOG"
+          exit 0
+          EOF
+          chmod +x "$RUNNER_TEMP/fakebin/az" "$RUNNER_TEMP/fakebin/docker"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          acrName: myacr
+          imageToDeploy: myacr.azurecr.io/app:3.0
+          containerAppName: test-app
+          resourceGroup: test-rg
+          ingress: disabled
+          disableTelemetry: 'true'
+      - name: Assert token-based docker login
+        run: |
+          DLOG="$RUNNER_TEMP/docker-calls.log"
+          AZLOG="$RUNNER_TEMP/az-calls.log"
+          cat "$AZLOG"; cat "$DLOG"
+          if ! grep -q '^az acr login --name myacr' "$AZLOG"; then echo "FAIL: az acr login not called"; exit 1; fi
+          LOGIN=$(grep '^docker login' "$DLOG" || true)
+          echo "login: $LOGIN"
+          for expected in "myacr.azurecr.io" "-u 00000000-0000-0000-0000-000000000000" "-p faketoken123"; do
+            if ! echo "$LOGIN" | grep -qF -- "$expected"; then echo "FAIL: docker login missing '$expected'"; exit 1; fi
+          done
+          echo "PASS"
+      - name: Assert up and ingress disable on existing app
+        run: |
+          AZLOG="$RUNNER_TEMP/az-calls.log"
+          UP=$(grep -E '^az containerapp up( |$)' "$AZLOG" || true)
+          echo "up: $UP"
+          for expected in "-g test-rg" "-n test-app" "-i myacr.azurecr.io/app:3.0"; do
+            if ! echo "$UP" | grep -qF -- "$expected"; then echo "FAIL: up missing '$expected'"; exit 1; fi
+          done
+          if echo "$UP" | grep -qF -- "--ingress"; then echo "FAIL: up should not pass --ingress when disabled"; exit 1; fi
+          if ! grep -q '^az containerapp ingress disable -g test-rg -n test-app' "$AZLOG"; then
+            echo "FAIL: ingress disable not called"; exit 1
+          fi
+          if grep -q '^az containerapp create' "$AZLOG"; then echo "FAIL: create should not be called"; exit 1; fi
+          echo "PASS"

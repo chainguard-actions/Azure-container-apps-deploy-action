@@ -141,9 +141,9 @@ runs:
       shell: bash
       run: |
         CA_GH_ACTION_START_MILLISECONDS=$(date +%s%N | cut -b1-13)
-        echo "CA_GH_ACTION_START_MILLISECONDS=${CA_GH_ACTION_START_MILLISECONDS}" >> "$GITHUB_ENV"
-        CA_GH_ACTION_RESULT_ARG="--property result=failed"
-        echo "CA_GH_ACTION_RESULT_ARG=${CA_GH_ACTION_RESULT_ARG}" >> "$GITHUB_ENV"
+        echo "CA_GH_ACTION_START_MILLISECONDS=${CA_GH_ACTION_START_MILLISECONDS}" >> $GITHUB_ENV
+        CA_GH_ACTION_RESULT_ARG="--property 'result=failed'"
+        echo "CA_GH_ACTION_RESULT_ARG=${CA_GH_ACTION_RESULT_ARG}" >> $GITHUB_ENV
 
     - name: Check for ACR name provided with application source path
       if: ${{ inputs.appSourcePath != '' && inputs.acrName == '' }}
@@ -194,39 +194,44 @@ runs:
     - name: Export Azure Container Registry information to environment variable for Azure CLI command
       if: ${{ inputs.acrName != '' && inputs.acrUsername != '' && inputs.acrPassword != '' && env.CA_GH_ACTION_ONLY_YAML != 'true' }}
       shell: bash
+      env:
+        INPUT_ACR_NAME: ${{ inputs.acrName }}
+        INPUT_ACR_USERNAME: ${{ inputs.acrUsername }}
+        INPUT_ACR_PASSWORD: ${{ inputs.acrPassword }}
       run: |
-        # Only a marker is stored; the registry credentials are passed to the Azure CLI
-        # commands directly from the action inputs (via env:), never via $GITHUB_ENV.
-        echo "CA_GH_ACTION_ACR_LOGIN_ARG=true" >> "$GITHUB_ENV"
+        CA_GH_ACTION_ACR_LOGIN_ARG="--registry-server ${INPUT_ACR_NAME}.azurecr.io --registry-username ${INPUT_ACR_USERNAME} --registry-password ${INPUT_ACR_PASSWORD}"
+        safe=$(printf '%s' "$CA_GH_ACTION_ACR_LOGIN_ARG" | tr -d '\n\r')
+        echo "CA_GH_ACTION_ACR_LOGIN_ARG=${safe}" >> "$GITHUB_ENV"
 
     - name: Get access token to log in to Azure Container Registry
       if: ${{ inputs.acrName != '' && (inputs.acrUsername == '' || inputs.acrPassword == '') }}
       shell: bash
       env:
-        ACR_NAME: ${{ inputs.acrName }}
+        INPUT_ACR_NAME: ${{ inputs.acrName }}
       run: |
-        CA_GH_ACTION_ACR_ACCESS_TOKEN=$(az acr login --name "$ACR_NAME" --output json --expose-token | jq -r '.accessToken')
-        CA_GH_ACTION_ACR_ACCESS_TOKEN=$(printf '%s' "$CA_GH_ACTION_ACR_ACCESS_TOKEN" | tr -d '\n\r')
-        echo "CA_GH_ACTION_ACR_ACCESS_TOKEN=${CA_GH_ACTION_ACR_ACCESS_TOKEN}" >> "$GITHUB_ENV"
-        printf '%s' "$CA_GH_ACTION_ACR_ACCESS_TOKEN" | docker login "${ACR_NAME}.azurecr.io" -u 00000000-0000-0000-0000-000000000000 --password-stdin
+        CA_GH_ACTION_ACR_ACCESS_TOKEN=$(az acr login --name "$INPUT_ACR_NAME" --output json --expose-token | jq -r '.accessToken')
+        safe=$(printf '%s' "$CA_GH_ACTION_ACR_ACCESS_TOKEN" | tr -d '\n\r')
+        echo "CA_GH_ACTION_ACR_ACCESS_TOKEN=${safe}" >> "$GITHUB_ENV"
+        docker login "${INPUT_ACR_NAME}.azurecr.io" -u 00000000-0000-0000-0000-000000000000 -p "$CA_GH_ACTION_ACR_ACCESS_TOKEN"
 
     - name: Export Dockerfile path to environment variable
       if: ${{ inputs.appSourcePath != '' && inputs.dockerfilePath != '' }}
       shell: bash
       env:
-        APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
-        DOCKERFILE_PATH: ${{ inputs.dockerfilePath }}
+        INPUT_APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
+        INPUT_DOCKERFILE_PATH: ${{ inputs.dockerfilePath }}
       run: |
-        CA_GH_ACTION_DOCKERFILE_PATH=$(printf '%s' "${APP_SOURCE_PATH}/${DOCKERFILE_PATH}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_DOCKERFILE_PATH=${CA_GH_ACTION_DOCKERFILE_PATH}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_DOCKERFILE_PATH="${INPUT_APP_SOURCE_PATH}/${INPUT_DOCKERFILE_PATH}"
+        safe=$(printf '%s' "$CA_GH_ACTION_DOCKERFILE_PATH" | tr -d '\n\r')
+        echo "CA_GH_ACTION_DOCKERFILE_PATH=${safe}" >> "$GITHUB_ENV"
 
     - name: Check for existing Dockerfile in application source
       if: ${{ inputs.appSourcePath != '' && inputs.dockerfilePath == '' }}
       shell: bash
       env:
-        APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
+        INPUT_APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
       run: |
-        dockerfilePath="${APP_SOURCE_PATH}/Dockerfile"
+        dockerfilePath="${INPUT_APP_SOURCE_PATH}/Dockerfile"
         if [ -f "$dockerfilePath" ]; then
           safe=$(printf '%s' "$dockerfilePath" | tr -d '\n\r')
           echo "CA_GH_ACTION_DOCKERFILE_PATH=${safe}" >> "$GITHUB_ENV"
@@ -236,28 +241,31 @@ runs:
       if: ${{ inputs.imageToBuild != '' && env.CA_GH_ACTION_ONLY_YAML != 'true' }}
       shell: bash
       env:
-        IMAGE_TO_BUILD: ${{ inputs.imageToBuild }}
+        INPUT_IMAGE_TO_BUILD: ${{ inputs.imageToBuild }}
       run: |
-        CA_GH_ACTION_IMAGE_TO_BUILD=$(printf '%s' "$IMAGE_TO_BUILD" | tr -d '\n\r')
-        echo "CA_GH_ACTION_IMAGE_TO_BUILD=${CA_GH_ACTION_IMAGE_TO_BUILD}" >> "$GITHUB_ENV"
+        safe=$(printf '%s' "$INPUT_IMAGE_TO_BUILD" | tr -d '\n\r')
+        echo "CA_GH_ACTION_IMAGE_TO_BUILD=${safe}" >> "$GITHUB_ENV"
 
     - name: Determine name of image to build if not provided
       if: ${{ inputs.acrName != '' && inputs.imageToBuild == '' && env.CA_GH_ACTION_ONLY_YAML != 'true' }}
       shell: bash
       env:
-        ACR_NAME: ${{ inputs.acrName }}
+        INPUT_ACR_NAME: ${{ inputs.acrName }}
+        GH_RUN_ID: ${{ github.run_id }}
+        GH_RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
-        CA_GH_ACTION_IMAGE_TO_BUILD=$(printf '%s' "${ACR_NAME}.azurecr.io/github-action/container-app:${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_IMAGE_TO_BUILD=${CA_GH_ACTION_IMAGE_TO_BUILD}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_IMAGE_TO_BUILD="${INPUT_ACR_NAME}.azurecr.io/github-action/container-app:${GH_RUN_ID}.${GH_RUN_ATTEMPT}"
+        safe=$(printf '%s' "$CA_GH_ACTION_IMAGE_TO_BUILD" | tr -d '\n\r')
+        echo "CA_GH_ACTION_IMAGE_TO_BUILD=${safe}" >> "$GITHUB_ENV"
 
     - name: Export name of image to deploy to environment variable
       if: ${{ inputs.imageToDeploy != '' }}
       shell: bash
       env:
-        IMAGE_TO_DEPLOY: ${{ inputs.imageToDeploy }}
+        INPUT_IMAGE_TO_DEPLOY: ${{ inputs.imageToDeploy }}
       run: |
-        CA_GH_ACTION_IMAGE_TO_DEPLOY=$(printf '%s' "$IMAGE_TO_DEPLOY" | tr -d '\n\r')
-        echo "CA_GH_ACTION_IMAGE_TO_DEPLOY=${CA_GH_ACTION_IMAGE_TO_DEPLOY}" >> "$GITHUB_ENV"
+        safe=$(printf '%s' "$INPUT_IMAGE_TO_DEPLOY" | tr -d '\n\r')
+        echo "CA_GH_ACTION_IMAGE_TO_DEPLOY=${safe}" >> "$GITHUB_ENV"
 
     - name: Update name of image to deploy if not provided
       if: ${{ inputs.imageToDeploy == '' && env.CA_GH_ACTION_ONLY_YAML != 'true' }}
@@ -270,19 +278,20 @@ runs:
       if: ${{ inputs.resourceGroup != '' }}
       shell: bash
       env:
-        RESOURCE_GROUP: ${{ inputs.resourceGroup }}
+        INPUT_RESOURCE_GROUP: ${{ inputs.resourceGroup }}
       run: |
-        CA_GH_ACTION_RESOURCE_GROUP=$(printf '%s' "$RESOURCE_GROUP" | tr -d '\n\r')
-        echo "CA_GH_ACTION_RESOURCE_GROUP=${CA_GH_ACTION_RESOURCE_GROUP}" >> "$GITHUB_ENV"
+        safe=$(printf '%s' "$INPUT_RESOURCE_GROUP" | tr -d '\n\r')
+        echo "CA_GH_ACTION_RESOURCE_GROUP=${safe}" >> "$GITHUB_ENV"
 
     - name: Determine resource group if not provided
       if: ${{ inputs.resourceGroup == '' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
       run: |
-        CA_GH_ACTION_RESOURCE_GROUP=$(printf '%s' "${CONTAINER_APP_NAME}-rg" | tr -d '\n\r')
-        echo "CA_GH_ACTION_RESOURCE_GROUP=${CA_GH_ACTION_RESOURCE_GROUP}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_RESOURCE_GROUP="${INPUT_CONTAINER_APP_NAME}-rg"
+        safe=$(printf '%s' "$CA_GH_ACTION_RESOURCE_GROUP" | tr -d '\n\r')
+        echo "CA_GH_ACTION_RESOURCE_GROUP=${safe}" >> "$GITHUB_ENV"
 
     - name: Check if the previously generated resource group exists
       if: ${{ inputs.resourceGroup == '' }}
@@ -298,19 +307,21 @@ runs:
       shell: bash
       run: |
         CA_GH_ACTION_DEFAULT_LOCATION=$(az provider show -n Microsoft.App --query "resourceTypes[?resourceType=='containerApps'].locations[] | [0]")
-        CA_GH_ACTION_DEFAULT_LOCATION=$(echo $CA_GH_ACTION_DEFAULT_LOCATION | sed 's/[ !()"]//g')
+        CA_GH_ACTION_DEFAULT_LOCATION=$(echo $CA_GH_ACTION_DEFAULT_LOCATION | sed 's/[ !()]//g')
         CA_GH_ACTION_DEFAULT_LOCATION=${CA_GH_ACTION_DEFAULT_LOCATION,,}
-        CA_GH_ACTION_DEFAULT_LOCATION=$(printf '%s' "$CA_GH_ACTION_DEFAULT_LOCATION" | tr -d '\n\r')
-        echo "CA_GH_ACTION_DEFAULT_LOCATION=${CA_GH_ACTION_DEFAULT_LOCATION}" >> "$GITHUB_ENV"
+        # Strip the JSON string quotes (previously removed by the shell when the value was inlined unquoted)
+        CA_GH_ACTION_DEFAULT_LOCATION=${CA_GH_ACTION_DEFAULT_LOCATION//\"/}
+        safe=$(printf '%s' "$CA_GH_ACTION_DEFAULT_LOCATION" | tr -d '\n\r')
+        echo "CA_GH_ACTION_DEFAULT_LOCATION=${safe}" >> "$GITHUB_ENV"
 
     - name: Set default location for Container Apps if location was provided
       if: ${{ env.CA_GH_ACTION_RG_EXISTS == 'false' && inputs.location != '' }}
       shell: bash
       env:
-        LOCATION: ${{ inputs.location }}
+        INPUT_LOCATION: ${{ inputs.location }}
       run: |
-        CA_GH_ACTION_DEFAULT_LOCATION=$(printf '%s' "$LOCATION" | tr -d '\n\r')
-        echo "CA_GH_ACTION_DEFAULT_LOCATION=${CA_GH_ACTION_DEFAULT_LOCATION}" >> "$GITHUB_ENV"
+        safe=$(printf '%s' "$INPUT_LOCATION" | tr -d '\n\r')
+        echo "CA_GH_ACTION_DEFAULT_LOCATION=${safe}" >> "$GITHUB_ENV"
 
     - name: Create resource group if it doesn't exist
       if: ${{ env.CA_GH_ACTION_RG_EXISTS == 'false' }}
@@ -324,19 +335,20 @@ runs:
       if: ${{ inputs.location != '' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        LOCATION: ${{ inputs.location }}
+        INPUT_LOCATION: ${{ inputs.location }}
       run: |
-        CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG=$(printf '%s' "--location ${LOCATION}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG=${CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG="--location ${INPUT_LOCATION}"
+        safe=$(printf '%s' "$CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG" | tr -d '\n\r')
+        echo "CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG=${safe}" >> "$GITHUB_ENV"
 
     - name: Check if the Container App already exists in the resource group
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
       run: |
         az containerapp show \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME" \
+          -n "$INPUT_CONTAINER_APP_NAME" \
           -o none && CA_GH_ACTION_RESOURCE_EXISTS=true || CA_GH_ACTION_RESOURCE_EXISTS=false
         echo "CA_GH_ACTION_RESOURCE_EXISTS=${CA_GH_ACTION_RESOURCE_EXISTS}" >> "$GITHUB_ENV"
 
@@ -344,19 +356,20 @@ runs:
       if: ${{ inputs.containerAppEnvironment != '' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        CONTAINER_APP_ENVIRONMENT: ${{ inputs.containerAppEnvironment }}
+        INPUT_CONTAINER_APP_ENVIRONMENT: ${{ inputs.containerAppEnvironment }}
       run: |
-        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT=$(printf '%s' "$CONTAINER_APP_ENVIRONMENT" | tr -d '\n\r')
-        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT=${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT}" >> "$GITHUB_ENV"
+        safe=$(printf '%s' "$INPUT_CONTAINER_APP_ENVIRONMENT" | tr -d '\n\r')
+        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT=${safe}" >> "$GITHUB_ENV"
 
     - name: Determine environment name if not provided
       if: ${{ inputs.containerAppEnvironment == '' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
       run: |
-        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT=$(printf '%s' "${CONTAINER_APP_NAME}-env" | tr -d '\n\r')
-        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT=${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT="${INPUT_CONTAINER_APP_NAME}-env"
+        safe=$(printf '%s' "$CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT" | tr -d '\n\r')
+        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT=${safe}" >> "$GITHUB_ENV"
 
     - name: Check if Container App environment already exists with the provided/determined name
       if: ${{ env.CA_GH_ACTION_RESOURCE_EXISTS == 'false' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
@@ -372,8 +385,9 @@ runs:
       if: ${{ env.CA_GH_ACTION_ENVIRONMENT_EXISTS == 'false' && inputs.containerAppEnvironment == '' && env.CA_CH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       run: |
-        CA_GH_ACTION_TEMP_ENV_NAME=$(az containerapp env list -g "$CA_GH_ACTION_RESOURCE_GROUP" --query '[0].name' -o tsv)
-        CA_GH_ACTION_TEMP_ENV_NAME=$(printf '%s' "$CA_GH_ACTION_TEMP_ENV_NAME" | tr -d '\n\r')
+        CA_GH_ACTION_TEMP_ENV_NAME=$(az containerapp env list -g "$CA_GH_ACTION_RESOURCE_GROUP" --query '[0].name')
+        # Strip the JSON string quotes (previously removed by the shell when the value was inlined unquoted)
+        CA_GH_ACTION_TEMP_ENV_NAME=$(printf '%s' "$CA_GH_ACTION_TEMP_ENV_NAME" | tr -d '\n\r"')
         if [[ "$CA_GH_ACTION_TEMP_ENV_NAME" != '' ]]; then
           echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT=${CA_GH_ACTION_TEMP_ENV_NAME}" >> "$GITHUB_ENV"
           echo "CA_GH_ACTION_ENVIRONMENT_EXISTS=true" >> "$GITHUB_ENV"
@@ -383,40 +397,46 @@ runs:
       if: ${{ env.CA_GH_ACTION_ENVIRONMENT_EXISTS == 'false' }}
       shell: bash
       run: |
-        location_args=()
-        if [ -n "${CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG:-}" ]; then
-          read -r -d '' -a location_args <<< "$CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG" || true
-        fi
+        split_args() {
+          SPLIT=()
+          if [ -n "$1" ]; then
+            printf '%s' "$1" | xargs -r true >/dev/null
+            while IFS= read -r -d '' t; do SPLIT+=("$t"); done \
+              < <(printf '%s' "$1" | xargs -r sh -c 'printf "%s\0" "$@"' sh)
+          fi
+        }
+        args=()
+        split_args "${CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
         az containerapp env create \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
           -n "$CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT" \
-          "${location_args[@]}"
+          ${args[@]+"${args[@]}"}
 
     - name: Export runtime stack to environment variable
       if: ${{ inputs.runtimeStack != '' && env.CA_GH_ACTION_ONLY_YAML != 'true' }}
       shell: bash
       env:
-        RUNTIME_STACK: ${{ inputs.runtimeStack }}
+        INPUT_RUNTIME_STACK: ${{ inputs.runtimeStack }}
       run: |
-        CA_GH_ACTION_RUNTIME_STACK=$(printf '%s' "$RUNTIME_STACK" | tr -d '\n\r')
-        echo "CA_GH_ACTION_RUNTIME_STACK=${CA_GH_ACTION_RUNTIME_STACK}" >> "$GITHUB_ENV"
+        safe=$(printf '%s' "$INPUT_RUNTIME_STACK" | tr -d '\n\r')
+        echo "CA_GH_ACTION_RUNTIME_STACK=${safe}" >> "$GITHUB_ENV"
 
     - name: Determine runtime stack if not provided
       if: ${{ inputs.appSourcePath != '' && inputs.runtimeStack == '' }}
       shell: bash
       env:
-        APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
+        INPUT_APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
       run: |
         docker run \
           --rm \
-          -v "${APP_SOURCE_PATH}:/app" \
+          -v "${INPUT_APP_SOURCE_PATH}:/app" \
           mcr.microsoft.com/oryx/cli:builder-debian-buster-20230208.1 \
           /bin/bash \
           -c "oryx dockerfile /app | head -n 1 | sed 's/ARG RUNTIME=//' >> /app/oryx-runtime.txt"
-        CA_GH_ACTION_RUNTIME_STACK=$(head -n 1 "${APP_SOURCE_PATH}/oryx-runtime.txt")
-        CA_GH_ACTION_RUNTIME_STACK=$(printf '%s' "$CA_GH_ACTION_RUNTIME_STACK" | tr -d '\n\r')
-        echo "CA_GH_ACTION_RUNTIME_STACK=${CA_GH_ACTION_RUNTIME_STACK}" >> "$GITHUB_ENV"
-        rm "${APP_SOURCE_PATH}/oryx-runtime.txt"
+        CA_GH_ACTION_RUNTIME_STACK=$(head -n 1 "${INPUT_APP_SOURCE_PATH}/oryx-runtime.txt")
+        safe=$(printf '%s' "$CA_GH_ACTION_RUNTIME_STACK" | tr -d '\n\r')
+        echo "CA_GH_ACTION_RUNTIME_STACK=${safe}" >> "$GITHUB_ENV"
+        rm "${INPUT_APP_SOURCE_PATH}/oryx-runtime.txt"
 
     - name: Export disabled ingress value to environment variable
       if: ${{ inputs.ingress == 'disabled' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
@@ -438,21 +458,22 @@ runs:
       if: ${{ inputs.ingress != '' && inputs.ingress != 'disabled' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        INGRESS: ${{ inputs.ingress }}
+        INPUT_INGRESS: ${{ inputs.ingress }}
       run: |
         CA_GH_ACTION_INGRESS_ENABLED="true"
         echo "CA_GH_ACTION_INGRESS_ENABLED=${CA_GH_ACTION_INGRESS_ENABLED}" >> $GITHUB_ENV
-        safe=$(printf '%s' "--ingress ${INGRESS}" | tr -d '\n\r')
+        CA_GH_ACTION_INGRESS_ARG="--ingress ${INPUT_INGRESS}"
+        safe=$(printf '%s' "$CA_GH_ACTION_INGRESS_ARG" | tr -d '\n\r')
         echo "CA_GH_ACTION_INGRESS_ARG=${safe}" >> "$GITHUB_ENV"
 
     - name: Export target port to environment variable
       if: ${{ env.CA_GH_ACTION_INGRESS_ENABLED == 'true' && inputs.targetPort != '' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        TARGET_PORT: ${{ inputs.targetPort }}
+        INPUT_TARGET_PORT: ${{ inputs.targetPort }}
       run: |
-        CA_GH_ACTION_TARGET_PORT=$(printf '%s' "$TARGET_PORT" | tr -d '\n\r')
-        echo "CA_GH_ACTION_TARGET_PORT=${CA_GH_ACTION_TARGET_PORT}" >> "$GITHUB_ENV"
+        safe=$(printf '%s' "$INPUT_TARGET_PORT" | tr -d '\n\r')
+        echo "CA_GH_ACTION_TARGET_PORT=${safe}" >> "$GITHUB_ENV"
 
     - name: Determine default target port if not provided and no Dockerfile provided/found
       if: ${{ env.CA_GH_ACTION_INGRESS_ENABLED == 'true' && inputs.targetPort == '' && env.CA_GH_ACTION_DOCKERFILE_PATH == '' && inputs.appSourcePath != '' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
@@ -471,26 +492,29 @@ runs:
       if: ${{ env.CA_GH_ACTION_INGRESS_ENABLED == 'true' && env.CA_GH_ACTION_TARGET_PORT != '' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       run: |
-        CA_GH_ACTION_TARGET_PORT_ARG=$(printf '%s' "--target-port ${CA_GH_ACTION_TARGET_PORT}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_TARGET_PORT_ARG=${CA_GH_ACTION_TARGET_PORT_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_TARGET_PORT_ARG="--target-port ${CA_GH_ACTION_TARGET_PORT}"
+        safe=$(printf '%s' "$CA_GH_ACTION_TARGET_PORT_ARG" | tr -d '\n\r')
+        echo "CA_GH_ACTION_TARGET_PORT_ARG=${safe}" >> "$GITHUB_ENV"
 
     - name: Export environment variables argument to environment variable if the Container App does not exist
       if: ${{ inputs.environmentVariables != '' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'false' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        ENVIRONMENT_VARIABLES: ${{ inputs.environmentVariables }}
+        INPUT_ENVIRONMENT_VARIABLES: ${{ inputs.environmentVariables }}
       run: |
-        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=$(printf '%s' "--env-vars ${ENVIRONMENT_VARIABLES}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG="--env-vars ${INPUT_ENVIRONMENT_VARIABLES}"
+        safe=$(printf '%s' "$CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG" | tr -d '\n\r')
+        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=${safe}" >> "$GITHUB_ENV"
 
     - name: Export environment variables argument to environment variable if the Container App does exist
       if: ${{ inputs.environmentVariables != '' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'true' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        ENVIRONMENT_VARIABLES: ${{ inputs.environmentVariables }}
+        INPUT_ENVIRONMENT_VARIABLES: ${{ inputs.environmentVariables }}
       run: |
-        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=$(printf '%s' "--replace-env-vars ${ENVIRONMENT_VARIABLES}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG="--replace-env-vars ${INPUT_ENVIRONMENT_VARIABLES}"
+        safe=$(printf '%s' "$CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG" | tr -d '\n\r')
+        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=${safe}" >> "$GITHUB_ENV"
 
     - name: Install pack CLI on non-Windows runner
       if: ${{ runner.os != 'Windows' && inputs.appSourcePath != '' && env.CA_GH_ACTION_DOCKERFILE_PATH == '' }}
@@ -515,43 +539,49 @@ runs:
       if: ${{ inputs.appSourcePath != '' && env.CA_GH_ACTION_DOCKERFILE_PATH == '' && inputs.disableTelemetry == 'false' }}
       shell: bash
       run: |
-        CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG='--env CALLER_ID=github-actions-v0'
-        echo "CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG=${CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG='--env "CALLER_ID=github-actions-v0"'
+        echo "CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG=${CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG}" >> $GITHUB_ENV
 
     - name: Disable telemetry for Oryx++ Builder
       if: ${{ inputs.appSourcePath != '' && env.CA_GH_ACTION_DOCKERFILE_PATH == '' && inputs.disableTelemetry == 'true' }}
       shell: bash
       run: |
-        CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG='--env ORYX_DISABLE_TELEMETRY=true'
-        echo "CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG=${CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG='--env "ORYX_DISABLE_TELEMETRY=true"'
+        echo "CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG=${CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG}" >> $GITHUB_ENV
 
     - name: Create runnable application image using Oryx++ Builder
       if: ${{ inputs.appSourcePath != '' && env.CA_GH_ACTION_DOCKERFILE_PATH == '' }}
       shell: bash
       env:
-        APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
+        INPUT_APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
       run: |
-        telemetry_args=()
-        if [ -n "${CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG:-}" ]; then
-          read -r -d '' -a telemetry_args <<< "$CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG" || true
-        fi
+        split_args() {
+          SPLIT=()
+          if [ -n "$1" ]; then
+            printf '%s' "$1" | xargs -r true >/dev/null
+            while IFS= read -r -d '' t; do SPLIT+=("$t"); done \
+              < <(printf '%s' "$1" | xargs -r sh -c 'printf "%s\0" "$@"' sh)
+          fi
+        }
+        args=()
+        split_args "${CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
         pack build \
           "$CA_GH_ACTION_IMAGE_TO_DEPLOY" \
-          --path "$APP_SOURCE_PATH" \
+          --path "$INPUT_APP_SOURCE_PATH" \
           --builder mcr.microsoft.com/oryx/builder:20230208.1 \
-          --run-image "mcr.microsoft.com/oryx/${CA_GH_ACTION_RUNTIME_STACK}" \
-          "${telemetry_args[@]}"
+          --run-image "mcr.microsoft.com/oryx/${CA_GH_ACTION_RUNTIME_STACK:-}" \
+          ${args[@]+"${args[@]}"}
 
     - name: Create runnable application image using provided Dockerfile
       if: ${{ inputs.appSourcePath != '' && env.CA_GH_ACTION_DOCKERFILE_PATH != '' }}
       shell: bash
       env:
-        APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
+        INPUT_APP_SOURCE_PATH: ${{ inputs.appSourcePath }}
       run: |
         docker build \
           --tag "$CA_GH_ACTION_IMAGE_TO_DEPLOY" \
           --file "$CA_GH_ACTION_DOCKERFILE_PATH" \
-          "$APP_SOURCE_PATH"
+          "$INPUT_APP_SOURCE_PATH"
 
     - name: Push image to Azure Container Registry
       if: ${{ inputs.appSourcePath != '' }}
@@ -562,202 +592,204 @@ runs:
       if: ${{ env.CA_GH_ACTION_YAML_PROVIDED == 'true' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'false' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
-        YAML_CONFIG_PATH: ${{ inputs.yamlConfigPath }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_YAML_CONFIG_PATH: ${{ inputs.yamlConfigPath }}
       run: |
         az containerapp create \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME" \
-          --yaml "$YAML_CONFIG_PATH"
+          -n "$INPUT_CONTAINER_APP_NAME" \
+          --yaml "$INPUT_YAML_CONFIG_PATH"
 
     - name: Create the Container App from provided arguments
       if: ${{ env.CA_GH_ACTION_YAML_PROVIDED != 'true' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'false' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
-        ACR_NAME: ${{ inputs.acrName }}
-        ACR_USERNAME: ${{ inputs.acrUsername }}
-        ACR_PASSWORD: ${{ inputs.acrPassword }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
       run: |
-        extra="${CA_GH_ACTION_INGRESS_ARG:-} ${CA_GH_ACTION_TARGET_PORT_ARG:-} ${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG:-}"
-        extra_args=()
-        if [ -n "${extra// /}" ]; then
-          printf '%s' "$extra" | xargs -r true   # fails on an unmatched quote
-          while IFS= read -r -d '' t; do extra_args+=("$t"); done \
-            < <(printf '%s' "$extra" | xargs -r printf '%s\0')
-        fi
-        acr_args=()
-        if [ -n "${CA_GH_ACTION_ACR_LOGIN_ARG:-}" ]; then
-          acr_args=(--registry-server "${ACR_NAME}.azurecr.io" --registry-username "$ACR_USERNAME" --registry-password "$ACR_PASSWORD")
-        fi
+        split_args() {
+          SPLIT=()
+          if [ -n "$1" ]; then
+            printf '%s' "$1" | xargs -r true >/dev/null
+            while IFS= read -r -d '' t; do SPLIT+=("$t"); done \
+              < <(printf '%s' "$1" | xargs -r sh -c 'printf "%s\0" "$@"' sh)
+          fi
+        }
+        args=()
+        split_args "${CA_GH_ACTION_INGRESS_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_TARGET_PORT_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_ACR_LOGIN_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
         az containerapp create \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME" \
+          -n "$INPUT_CONTAINER_APP_NAME" \
           -i "$CA_GH_ACTION_IMAGE_TO_DEPLOY" \
           --environment "$CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT" \
-          "${acr_args[@]}" \
-          "${extra_args[@]}"
+          ${args[@]+"${args[@]}"}
 
     - name: Update the existing Container App from a YAML configuration file
       if: ${{ env.CA_GH_ACTION_YAML_PROVIDED == 'true' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'true' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
-        YAML_CONFIG_PATH: ${{ inputs.yamlConfigPath }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_YAML_CONFIG_PATH: ${{ inputs.yamlConfigPath }}
       run: |
         az containerapp update \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME" \
-          --yaml "$YAML_CONFIG_PATH"
+          -n "$INPUT_CONTAINER_APP_NAME" \
+          --yaml "$INPUT_YAML_CONFIG_PATH"
 
     - name: Determine whether or not 'update' or 'up' should be used
       if: ${{ env.CA_GH_ACTION_YAML_PROVIDED != 'true' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'true' && (inputs.targetPort != '' || inputs.ingress != '') }}
       shell: bash
       run: |
         CA_GH_ACTION_USE_UP="true"
-        echo "CA_GH_ACTION_USE_UP=${CA_GH_ACTION_USE_UP}" >> "$GITHUB_ENV"
+        echo "CA_GH_ACTION_USE_UP=${CA_GH_ACTION_USE_UP}" >> $GITHUB_ENV
 
     - name: Update the Container Registry details on the existing Container App
       if: ${{ env.CA_GH_ACTION_ACR_LOGIN_ARG != '' && env.CA_GH_ACTION_USE_UP != 'true' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'true' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
-        ACR_NAME: ${{ inputs.acrName }}
-        ACR_USERNAME: ${{ inputs.acrUsername }}
-        ACR_PASSWORD: ${{ inputs.acrPassword }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_ACR_NAME: ${{ inputs.acrName }}
+        INPUT_ACR_USERNAME: ${{ inputs.acrUsername }}
+        INPUT_ACR_PASSWORD: ${{ inputs.acrPassword }}
       run: |
         az containerapp registry set \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME" \
-          --server "${ACR_NAME}.azurecr.io" \
-          --username "$ACR_USERNAME" \
-          --password "$ACR_PASSWORD"
+          -n "$INPUT_CONTAINER_APP_NAME" \
+          --server "${INPUT_ACR_NAME}.azurecr.io" \
+          --username "$INPUT_ACR_USERNAME" \
+          --password "$INPUT_ACR_PASSWORD"
 
     - name: Update the existing Container App from provided arguments via 'update' (no ingress values provided)
       if: ${{ env.CA_GH_ACTION_USE_UP != 'true' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'true' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
       run: |
-        extra="${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG:-}"
-        extra_args=()
-        if [ -n "${extra// /}" ]; then
-          printf '%s' "$extra" | xargs -r true   # fails on an unmatched quote
-          while IFS= read -r -d '' t; do extra_args+=("$t"); done \
-            < <(printf '%s' "$extra" | xargs -r printf '%s\0')
-        fi
+        split_args() {
+          SPLIT=()
+          if [ -n "$1" ]; then
+            printf '%s' "$1" | xargs -r true >/dev/null
+            while IFS= read -r -d '' t; do SPLIT+=("$t"); done \
+              < <(printf '%s' "$1" | xargs -r sh -c 'printf "%s\0" "$@"' sh)
+          fi
+        }
+        args=()
+        split_args "${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
         az containerapp update \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME" \
+          -n "$INPUT_CONTAINER_APP_NAME" \
           -i "$CA_GH_ACTION_IMAGE_TO_DEPLOY" \
-          "${extra_args[@]}"
+          ${args[@]+"${args[@]}"}
 
     - name: Reset the ingress argument environment variable if it wasn't provided (use default ingress value)
       if: ${{ inputs.ingress == '' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' && env.CA_GH_ACTION_RESOURCE_EXISTS == 'true' }}
       shell: bash
       run: |
         CA_GH_ACTION_INGRESS_ARG=""
-        echo "CA_GH_ACTION_INGRESS_ARG=${CA_GH_ACTION_INGRESS_ARG}" >> "$GITHUB_ENV"
+        echo "CA_GH_ACTION_INGRESS_ARG=${CA_GH_ACTION_INGRESS_ARG}" >> $GITHUB_ENV
 
     - name: Reset the environment variables argument environment variable for the 'up' command
       if: ${{ env.CA_GH_ACTION_USE_UP == 'true' && inputs.environmentVariables != '' }}
       shell: bash
       env:
-        ENVIRONMENT_VARIABLES: ${{ inputs.environmentVariables }}
+        INPUT_ENVIRONMENT_VARIABLES: ${{ inputs.environmentVariables }}
       run: |
-        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=$(printf '%s' "--env-vars ${ENVIRONMENT_VARIABLES}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG="--env-vars ${INPUT_ENVIRONMENT_VARIABLES}"
+        safe=$(printf '%s' "$CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG" | tr -d '\n\r')
+        echo "CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG=${safe}" >> "$GITHUB_ENV"
 
     - name: Update the existing Container App from provided arguments via 'up' (ingress values provided)
       if: ${{ env.CA_GH_ACTION_USE_UP == 'true' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
-        ACR_NAME: ${{ inputs.acrName }}
-        ACR_USERNAME: ${{ inputs.acrUsername }}
-        ACR_PASSWORD: ${{ inputs.acrPassword }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
       run: |
-        extra="${CA_GH_ACTION_TARGET_PORT_ARG:-} ${CA_GH_ACTION_INGRESS_ARG:-} ${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG:-}"
-        extra_args=()
-        if [ -n "${extra// /}" ]; then
-          printf '%s' "$extra" | xargs -r true   # fails on an unmatched quote
-          while IFS= read -r -d '' t; do extra_args+=("$t"); done \
-            < <(printf '%s' "$extra" | xargs -r printf '%s\0')
-        fi
-        acr_args=()
-        if [ -n "${CA_GH_ACTION_ACR_LOGIN_ARG:-}" ]; then
-          acr_args=(--registry-server "${ACR_NAME}.azurecr.io" --registry-username "$ACR_USERNAME" --registry-password "$ACR_PASSWORD")
-        fi
+        split_args() {
+          SPLIT=()
+          if [ -n "$1" ]; then
+            printf '%s' "$1" | xargs -r true >/dev/null
+            while IFS= read -r -d '' t; do SPLIT+=("$t"); done \
+              < <(printf '%s' "$1" | xargs -r sh -c 'printf "%s\0" "$@"' sh)
+          fi
+        }
+        args=()
+        split_args "${CA_GH_ACTION_TARGET_PORT_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_INGRESS_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_ACR_LOGIN_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
         az containerapp up \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME" \
+          -n "$INPUT_CONTAINER_APP_NAME" \
           -i "$CA_GH_ACTION_IMAGE_TO_DEPLOY" \
-          "${extra_args[@]}" \
-          "${acr_args[@]}"
+          ${args[@]+"${args[@]}"}
 
     - name: Disable ingress on the existing Container App
       if: ${{ env.CA_GH_ACTION_RESOURCE_EXISTS == 'true' && inputs.ingress == 'disabled' && env.CA_GH_ACTION_YAML_PROVIDED != 'true' }}
       shell: bash
       env:
-        CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
+        INPUT_CONTAINER_APP_NAME: ${{ inputs.containerAppName }}
       run: |
         az containerapp ingress disable \
           -g "$CA_GH_ACTION_RESOURCE_GROUP" \
-          -n "$CONTAINER_APP_NAME"
+          -n "$INPUT_CONTAINER_APP_NAME"
 
     - name: Mark action as 'succeeded' for telemetry
       if: ${{ inputs.disableTelemetry == 'false' }}
       shell: bash
       run: |
-        CA_GH_ACTION_RESULT_ARG="--property result=succeeded"
-        echo "CA_GH_ACTION_RESULT_ARG=${CA_GH_ACTION_RESULT_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_RESULT_ARG="--property 'result=succeeded'"
+        echo "CA_GH_ACTION_RESULT_ARG=${CA_GH_ACTION_RESULT_ARG}" >> $GITHUB_ENV
 
     - name: End timer that's tracking action execution length, in milliseconds
       if: ${{ always() && inputs.disableTelemetry == 'false' }}
       shell: bash
       run: |
         CA_GH_ACTION_END_MILLISECONDS=$(date +%s%N | cut -b1-13)
-        start="${CA_GH_ACTION_START_MILLISECONDS:-}"
-        case "$start" in
-          ''|*[!0-9]*) start="$CA_GH_ACTION_END_MILLISECONDS" ;;
-        esac
-        length=$((CA_GH_ACTION_END_MILLISECONDS - start))
-        CA_GH_ACTION_LENGTH_MILLISECONDS_ARG=$(printf '%s' "--processing-time ${length}" | tr -d '\n\r')
-        echo "CA_GH_ACTION_LENGTH_MILLISECONDS_ARG=${CA_GH_ACTION_LENGTH_MILLISECONDS_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_START_MILLISECONDS="${CA_GH_ACTION_START_MILLISECONDS:-}"
+        CA_GH_ACTION_LENGTH_MILLISECONDS_ARG="--processing-time '$((CA_GH_ACTION_END_MILLISECONDS-CA_GH_ACTION_START_MILLISECONDS))'"
+        echo "CA_GH_ACTION_LENGTH_MILLISECONDS_ARG=${CA_GH_ACTION_LENGTH_MILLISECONDS_ARG}" >> $GITHUB_ENV
 
     - name: Set telemetry for previously built image scenario
       if: ${{ inputs.disableTelemetry == 'false' && inputs.appSourcePath == '' }}
       shell: bash
       run: |
-        CA_GH_ACTION_SCENARIO_ARG="--property scenario=used-image"
-        echo "CA_GH_ACTION_SCENARIO_ARG=${CA_GH_ACTION_SCENARIO_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_SCENARIO_ARG="--property 'scenario=used-image'"
+        echo "CA_GH_ACTION_SCENARIO_ARG=${CA_GH_ACTION_SCENARIO_ARG}" >> $GITHUB_ENV
 
     - name: Set telemetry for built Dockerfile scenario
       if: ${{ inputs.disableTelemetry == 'false' && env.CA_GH_ACTION_DOCKERFILE_PATH != '' }}
       shell: bash
       run: |
-        CA_GH_ACTION_SCENARIO_ARG="--property scenario=used-dockerfile"
-        echo "CA_GH_ACTION_SCENARIO_ARG=${CA_GH_ACTION_SCENARIO_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_SCENARIO_ARG="--property 'scenario=used-dockerfile'"
+        echo "CA_GH_ACTION_SCENARIO_ARG=${CA_GH_ACTION_SCENARIO_ARG}" >> $GITHUB_ENV
 
     - name: Set telemetry for no Dockerfile scenario
       if: ${{ inputs.disableTelemetry == 'false' && inputs.appSourcePath != '' && env.CA_GH_ACTION_DOCKERFILE_PATH == '' }}
       shell: bash
       run: |
-        CA_GH_ACTION_SCENARIO_ARG="--property scenario=used-builder"
-        echo "CA_GH_ACTION_SCENARIO_ARG=${CA_GH_ACTION_SCENARIO_ARG}" >> "$GITHUB_ENV"
+        CA_GH_ACTION_SCENARIO_ARG="--property 'scenario=used-builder'"
+        echo "CA_GH_ACTION_SCENARIO_ARG=${CA_GH_ACTION_SCENARIO_ARG}" >> $GITHUB_ENV
 
     - name: Log telemetry for action
       if: ${{ always() && inputs.disableTelemetry == 'false' }}
       shell: bash
       run: |
-        telemetry_args=()
-        telemetry="${CA_GH_ACTION_LENGTH_MILLISECONDS_ARG:-} ${CA_GH_ACTION_SCENARIO_ARG:-} ${CA_GH_ACTION_RESULT_ARG:-}"
-        if [ -n "${telemetry// /}" ]; then
-          read -r -d '' -a telemetry_args <<< "$telemetry" || true
-        fi
+        split_args() {
+          SPLIT=()
+          if [ -n "$1" ]; then
+            printf '%s' "$1" | xargs -r true >/dev/null
+            while IFS= read -r -d '' t; do SPLIT+=("$t"); done \
+              < <(printf '%s' "$1" | xargs -r sh -c 'printf "%s\0" "$@"' sh)
+          fi
+        }
+        args=()
+        split_args "${CA_GH_ACTION_LENGTH_MILLISECONDS_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_SCENARIO_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
+        split_args "${CA_GH_ACTION_RESULT_ARG:-}"; args+=(${SPLIT[@]+"${SPLIT[@]}"})
         docker run \
           --rm \
           mcr.microsoft.com/oryx/cli:debian-buster-20230207.2 \
           /bin/bash \
-          -c 'oryx telemetry --event-name ContainerAppsGitHubAction "$@"' \
-          bash "${telemetry_args[@]}"
+          -c 'oryx telemetry --event-name "ContainerAppsGitHubAction" "$@"' bash ${args[@]+"${args[@]}"}

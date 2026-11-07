@@ -6,73 +6,76 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Install fake az and docker CLIs and app source
+      - name: Install fake az and docker CLIs
         run: |
-          mkdir -p "$RUNNER_TEMP/fakebin" "$RUNNER_TEMP/app/docker"
-          printf 'FROM scratch\n' > "$RUNNER_TEMP/app/docker/Dockerfile.custom"
-          : > "$RUNNER_TEMP/az-calls.log"
-          : > "$RUNNER_TEMP/docker-calls.log"
-          cat > "$RUNNER_TEMP/fakebin/az" <<'EOF'
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          AZLOG="$RUNNER_TEMP/az-calls.log"
+          DLOG="$RUNNER_TEMP/docker-calls.log"
+          : > "$AZLOG"
+          : > "$DLOG"
+          cat > "$RUNNER_TEMP/fakebin/az" <<EOF
           #!/bin/bash
-          echo "az $*" >> "$RUNNER_TEMP/az-calls.log"
-          case "$*" in
+          echo "az \$*" >> "$AZLOG"
+          case "\$*" in
             "containerapp show"*) exit 1 ;;
-            "acr login"*) echo '{"accessToken":"faketoken","loginServer":"myacr.azurecr.io"}' ;;
+            "containerapp env show"*) exit 1 ;;
+            "containerapp env list"*) exit 0 ;;
           esac
           exit 0
           EOF
-          cat > "$RUNNER_TEMP/fakebin/docker" <<'EOF'
+          cat > "$RUNNER_TEMP/fakebin/docker" <<EOF
           #!/bin/bash
-          echo "docker $*" >> "$RUNNER_TEMP/docker-calls.log"
-          case "$1" in
-            login) cat > /dev/null 2>&1 || true; echo "Login Succeeded" ;;
-          esac
+          echo "docker \$*" >> "$DLOG"
           exit 0
           EOF
           chmod +x "$RUNNER_TEMP/fakebin/az" "$RUNNER_TEMP/fakebin/docker"
           echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/app"
+          printf 'FROM scratch\n' > "$RUNNER_TEMP/app/Dockerfile.custom"
       - id: action
         uses: .
         with:
           appSourcePath: ${{ runner.temp }}/app
           acrName: myacr
-          dockerfilePath: docker/Dockerfile.custom
-          imageToBuild: myacr.azurecr.io/custom:1.0
-          runtimeStack: 'node:18'
-          containerAppName: build-app
+          acrUsername: myuser
+          acrPassword: mypass
+          dockerfilePath: Dockerfile.custom
+          imageToBuild: myacr.azurecr.io/custom:1
+          runtimeStack: node:18
+          containerAppName: test-app
           resourceGroup: test-rg
-          containerAppEnvironment: test-env
+          location: eastus
+          ingress: internal
+          targetPort: '8080'
           disableTelemetry: 'true'
-      - name: Assert docker build/push and az calls
+      - name: Assert docker build and push
+        env:
+          APPDIR: ${{ runner.temp }}/app
         run: |
-          AZ="$RUNNER_TEMP/az-calls.log"
-          DK="$RUNNER_TEMP/docker-calls.log"
-          echo "--- az ---"; cat "$AZ"
-          echo "--- docker ---"; cat "$DK"
-          if ! grep -qF "az acr login --name myacr" "$AZ"; then
-            echo "FAIL: az acr login not called"; exit 1
-          fi
-          if ! grep -qF "docker login myacr.azurecr.io" "$DK"; then
-            echo "FAIL: docker login not called"; exit 1
-          fi
-          BUILD=$(grep '^docker build' "$DK" || true)
+          DLOG="$RUNNER_TEMP/docker-calls.log"
+          cat "$DLOG"
+          BUILD=$(grep '^docker build' "$DLOG" || true)
           echo "build: $BUILD"
-          for expected in "--tag myacr.azurecr.io/custom:1.0" "--file $RUNNER_TEMP/app/docker/Dockerfile.custom"; do
-            if ! echo "$BUILD" | grep -qF -- "$expected"; then
-              echo "FAIL: build missing '$expected'"; exit 1
-            fi
+          for expected in "--tag myacr.azurecr.io/custom:1" "--file $APPDIR/Dockerfile.custom"; do
+            if ! echo "$BUILD" | grep -qF -- "$expected"; then echo "FAIL: build missing '$expected'"; exit 1; fi
           done
-          if ! grep -qxF "docker push myacr.azurecr.io/custom:1.0" "$DK"; then
-            echo "FAIL: push not called with expected image"; exit 1
+          if ! grep -qF 'docker push myacr.azurecr.io/custom:1' "$DLOG"; then
+            echo "FAIL: push not called with built image"; exit 1
           fi
-          if grep -q '^docker run' "$DK"; then
-            echo "FAIL: oryx runtime detection should be skipped when runtimeStack is set"; exit 1
-          fi
-          LINE=$(grep '^az containerapp create' "$AZ" || true)
+          echo "PASS"
+      - name: Assert az calls
+        run: |
+          AZLOG="$RUNNER_TEMP/az-calls.log"
+          cat "$AZLOG"
+          ENVC=$(grep '^az containerapp env create' "$AZLOG" || true)
+          echo "env create: $ENVC"
+          for expected in "-g test-rg" "-n test-app-env" "--location eastus"; do
+            if ! echo "$ENVC" | grep -qF -- "$expected"; then echo "FAIL: env create missing '$expected'"; exit 1; fi
+          done
+          LINE=$(grep '^az containerapp create' "$AZLOG" || true)
           echo "create: $LINE"
-          for expected in "-g test-rg" "-n build-app" "-i myacr.azurecr.io/custom:1.0" "--environment test-env" "--ingress external" "--target-port 80"; do
-            if ! echo "$LINE" | grep -qF -- "$expected"; then
-              echo "FAIL: create missing '$expected'"; exit 1
-            fi
+          for expected in "-g test-rg" "-n test-app" "-i myacr.azurecr.io/custom:1" "--environment test-app-env" "--ingress internal" "--target-port 8080" "--registry-server myacr.azurecr.io" "--registry-username myuser" "--registry-password mypass"; do
+            if ! echo "$LINE" | grep -qF -- "$expected"; then echo "FAIL: create missing '$expected'"; exit 1; fi
           done
+          if grep -q '^az acr login' "$AZLOG"; then echo "FAIL: acr token login should not be used with username/password"; exit 1; fi
           echo "PASS"

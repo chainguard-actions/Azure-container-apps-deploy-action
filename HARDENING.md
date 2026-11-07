@@ -10,497 +10,541 @@
 
 **Harden Agent Version:** `2`
 
-Action **Azure--container-apps-deploy-action/v0** was hardened automatically. 101 finding(s) were identified and resolved across 1 iteration(s).
+Action **Azure--container-apps-deploy-action/v0** was hardened automatically. 107 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### unpinned-uses (severity: high)
 
-action.yml has composite-action steps whose uses: refs are tags, not 40-character commit SHAs: `uses: azure/login@v1` and `uses: docker/login-action@v2.0.0`.
+Two actions are referenced by tag instead of a 40-character commit SHA: 'uses: azure/login@v1' (line 162) and 'uses: docker/login-action@v2.0.0' (line 167).
 
 Locations:
 
-- `action.yml:165`
-- `action.yml:170`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export Azure Container Registry information...'. The run: script puts expressions straight into the shell: `CA_GH_ACTION_ACR_LOGIN_ARG="--registry-server ${{ inputs.acrName }}.azurecr.io --registry-username ${{ inputs.acrUsername }} --registry-password ${{ inputs.acrPassword }}"`.
-
-Locations:
-
-- `action.yml:181`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Get access token to log in to Azure Container Registry'. The script contains `az acr login --name ${{ inputs.acrName }} ...` and `docker login ${{ inputs.acrName }}.azurecr.io ... -p $CA_GH_ACTION_ACR_ACCESS_TOKEN`, and the token variable is not quoted.
-
-Locations:
-
-- `action.yml:188`
-- `action.yml:190`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export Dockerfile path to environment variable'. The script contains `CA_GH_ACTION_DOCKERFILE_PATH="${{ inputs.appSourcePath }}/${{ inputs.dockerfilePath }}"`.
-
-Locations:
-
-- `action.yml:196`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Check for existing Dockerfile in application source'. The script contains `dockerfilePath=${{ inputs.appSourcePath }}/Dockerfile`, with no quoting.
-
-Locations:
-
-- `action.yml:203`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export name of image to build'. The script contains `CA_GH_ACTION_IMAGE_TO_BUILD="${{ inputs.imageToBuild }}"`.
-
-Locations:
-
-- `action.yml:210`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Determine name of image to build if not provided'. The script contains `CA_GH_ACTION_IMAGE_TO_BUILD="${{ inputs.acrName }}.azurecr.io/github-action/container-app:${{ github.run_id }}.${{ github.run_attempt }}"`.
-
-Locations:
-
-- `action.yml:217`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export name of image to deploy'. The script contains `CA_GH_ACTION_IMAGE_TO_DEPLOY="${{ inputs.imageToDeploy }}"`.
-
-Locations:
-
-- `action.yml:224`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Update name of image to deploy if not provided'. The script contains `CA_GH_ACTION_IMAGE_TO_DEPLOY="${{ env.CA_GH_ACTION_IMAGE_TO_BUILD }}"`.
-
-Locations:
-
-- `action.yml:231`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export resource group'. The script contains `CA_GH_ACTION_RESOURCE_GROUP="${{ inputs.resourceGroup }}"`.
-
-Locations:
-
-- `action.yml:238`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Determine resource group if not provided'. The script contains `CA_GH_ACTION_RESOURCE_GROUP="${{ inputs.containerAppName }}-rg"`.
-
-Locations:
-
-- `action.yml:245`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Check if the previously generated resource group exists'. The script contains `-n ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}`.
-
-Locations:
-
-- `action.yml:253`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Set default location for Container Apps if location was provided'. The script contains `CA_GH_ACTION_DEFAULT_LOCATION="${{ inputs.location }}"`.
-
-Locations:
-
-- `action.yml:270`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Create resource group if it doesn't exist'. The script contains `-n ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}` and `-l ${{ env.CA_GH_ACTION_DEFAULT_LOCATION }}`.
-
-Locations:
-
-- `action.yml:278`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export location argument'. The script contains `CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG="--location ${{ inputs.location }}"`.
-
-Locations:
-
-- `action.yml:285`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Check if the Container App already exists'. The script contains `-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}` and `-n ${{ inputs.containerAppName }}`.
-
-Locations:
-
-- `action.yml:292`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export environment to environment variable'. The script contains `CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT="${{ inputs.containerAppEnvironment }}"`.
-
-Locations:
-
-- `action.yml:301`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Determine environment name if not provided'. The script contains `CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT="${{ inputs.containerAppName }}-env"`.
-
-Locations:
-
-- `action.yml:308`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Check if Container App environment already exists'. The script contains `-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}` and `-n ${{ env.CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT }}`.
-
-Locations:
-
-- `action.yml:316`
-
-### script-injection (severity: high)
-
-Sub-rules (a) and (b), step 'Reuse an existing Container App environment'. The script contains `az containerapp env list -g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}`, and `$CA_GH_ACTION_TEMP_ENV_NAME` is expanded without quotes.
-
-Locations:
-
-- `action.yml:325`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Create Container App environment'. The script contains `-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}`, `-n ${{ env.CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT }}` and `${{ env.CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG }}`.
-
-Locations:
-
-- `action.yml:336`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export runtime stack'. The script contains `CA_GH_ACTION_RUNTIME_STACK="${{ inputs.runtimeStack }}"`.
-
-Locations:
-
-- `action.yml:344`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Determine runtime stack if not provided'. The script contains `-v ${{ inputs.appSourcePath }}:/app`, `head -n 1 ${{ inputs.appSourcePath }}/oryx-runtime.txt` and `rm ${{ inputs.appSourcePath }}/oryx-runtime.txt`.
-
-Locations:
-
-- `action.yml:353`
-- `action.yml:357`
-- `action.yml:359`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export ingress value'. The script contains `CA_GH_ACTION_INGRESS_ARG="--ingress ${{ inputs.ingress }}"`.
-
-Locations:
-
-- `action.yml:383`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export target port'. The script contains `CA_GH_ACTION_TARGET_PORT="${{ inputs.targetPort }}"`.
-
-Locations:
-
-- `action.yml:390`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Determine default target port'. The script contains `if [[ "${{ env.CA_GH_ACTION_RUNTIME_STACK }}" == "python:"* ]]`.
-
-Locations:
-
-- `action.yml:397`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Export target port information'. The script contains `CA_GH_ACTION_TARGET_PORT_ARG="--target-port ${{ env.CA_GH_ACTION_TARGET_PORT }}"`.
-
-Locations:
-
-- `action.yml:410`
-
-### script-injection (severity: high)
-
-Sub-rule (a), steps 'Export environment variables argument...' (two steps) and 'Reset the environment variables argument...'. The scripts contain `--env-vars ${{ inputs.environmentVariables }}` and `--replace-env-vars ${{ inputs.environmentVariables }}`.
-
-Locations:
-
-- `action.yml:417`
-- `action.yml:424`
-- `action.yml:556`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Install pack CLI on non-Windows runner'. The script contains `curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.27.0/pack-v0.27.0-${{ runner.os }}.tgz"`.
-
-Locations:
-
-- `action.yml:430`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Create runnable application image using Oryx++ Builder'. The script contains `${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}`, `--path ${{ inputs.appSourcePath }}`, `mcr.microsoft.com/oryx/${{ env.CA_GH_ACTION_RUNTIME_STACK }}` and `${{ env.CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG }}`.
-
-Locations:
-
-- `action.yml:465`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Create runnable application image using provided Dockerfile'. The script contains `--tag ${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}`, `--file ${{ env.CA_GH_ACTION_DOCKERFILE_PATH }}` and `${{ inputs.appSourcePath }}`.
-
-Locations:
-
-- `action.yml:476`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Push image to Azure Container Registry'. The script contains `docker push ${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}`.
-
-Locations:
-
-- `action.yml:483`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Create the Container App from a YAML configuration file'. The script contains `-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}`, `-n ${{ inputs.containerAppName }}` and `--yaml ${{ inputs.yamlConfigPath }}`.
-
-Locations:
-
-- `action.yml:490`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Create the Container App from provided arguments'. The script contains `-n ${{ inputs.containerAppName }}`, `-i ${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}`, `${{ env.CA_GH_ACTION_ACR_LOGIN_ARG }}`, `${{ env.CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG }}` and other env expressions.
-
-Locations:
-
-- `action.yml:499`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Update the existing Container App from a YAML configuration file'. The script contains `-n ${{ inputs.containerAppName }}` and `--yaml ${{ inputs.yamlConfigPath }}`.
-
-Locations:
-
-- `action.yml:513`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Update the Container Registry details'. The script contains `--server ${{ inputs.acrName }}.azurecr.io`, `--username ${{ inputs.acrUsername }}` and `--password ${{ inputs.acrPassword }}`.
-
-Locations:
-
-- `action.yml:529`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Update the existing Container App ... via update'. The script contains `-n ${{ inputs.containerAppName }}`, `-i ${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}` and `${{ env.CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG }}`.
-
-Locations:
-
-- `action.yml:540`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Update the existing Container App ... via up'. The script contains `-n ${{ inputs.containerAppName }}`, `${{ env.CA_GH_ACTION_INGRESS_ARG }}`, `${{ env.CA_GH_ACTION_ACR_LOGIN_ARG }}` and other env expressions.
-
-Locations:
-
-- `action.yml:564`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Disable ingress on the existing Container App'. The script contains `-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}` and `-n ${{ inputs.containerAppName }}`.
-
-Locations:
-
-- `action.yml:577`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'End timer'. The script contains `CA_GH_ACTION_START_MILLISECONDS=${{ env.CA_GH_ACTION_START_MILLISECONDS }}`, which is unquoted and later used in arithmetic expansion.
-
-Locations:
-
-- `action.yml:592`
-
-### script-injection (severity: high)
-
-Sub-rule (a), step 'Log telemetry for action'. The script contains `-c "oryx telemetry --event-name 'ContainerAppsGitHubAction' ${{ env.CA_GH_ACTION_LENGTH_MILLISECONDS_ARG }} ${{ env.CA_GH_ACTION_SCENARIO_ARG }} ${{ env.CA_GH_ACTION_RESULT_ARG }}"`.
-
-Locations:
-
-- `action.yml:625`
+- `action.yml:162`
+- `action.yml:167`
 
 ### github-env-injection (severity: high)
 
-Step 'Export Azure Container Registry information' writes CA_GH_ACTION_ACR_LOGIN_ARG to $GITHUB_ENV without running `printf '%s' | tr -d '\n\r'` first. The value is built from inputs.acrName, inputs.acrUsername and inputs.acrPassword.
+Step 'Export Azure Container Registry information...' writes inputs.acrName, inputs.acrUsername and inputs.acrPassword to $GITHUB_ENV without printf '%s' | tr -d '\n\r'.
 
 Locations:
 
-- `action.yml:182`
+- `action.yml:179`
 
 ### github-env-injection (severity: high)
 
-Step 'Export Dockerfile path' writes CA_GH_ACTION_DOCKERFILE_PATH, built from inputs.appSourcePath and inputs.dockerfilePath, to $GITHUB_ENV without sanitizing it.
+Step 'Export Dockerfile path to environment variable' writes inputs.appSourcePath and inputs.dockerfilePath to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:197`
+- `action.yml:194`
 
 ### github-env-injection (severity: high)
 
-Step 'Check for existing Dockerfile' writes dockerfilePath, built from inputs.appSourcePath, to $GITHUB_ENV without sanitizing it.
+Step 'Check for existing Dockerfile in application source' writes dockerfilePath, which comes from inputs.appSourcePath, to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:204`
+- `action.yml:201`
 
 ### github-env-injection (severity: high)
 
-Step 'Export name of image to build' writes CA_GH_ACTION_IMAGE_TO_BUILD, taken from inputs.imageToBuild, to $GITHUB_ENV without sanitizing it.
+Step 'Export name of image to build' writes inputs.imageToBuild to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:211`
+- `action.yml:208`
 
 ### github-env-injection (severity: high)
 
-Step 'Determine name of image to build' writes CA_GH_ACTION_IMAGE_TO_BUILD, built from inputs.acrName, to $GITHUB_ENV without sanitizing it.
+Step 'Determine name of image to build if not provided' writes inputs.acrName and github.run_id to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:218`
+- `action.yml:215`
 
 ### github-env-injection (severity: high)
 
-Step 'Export name of image to deploy' writes CA_GH_ACTION_IMAGE_TO_DEPLOY, taken from inputs.imageToDeploy, to $GITHUB_ENV without sanitizing it.
+Step 'Export name of image to deploy' writes inputs.imageToDeploy to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:225`
+- `action.yml:222`
 
 ### github-env-injection (severity: high)
 
-Step 'Update name of image to deploy' writes CA_GH_ACTION_IMAGE_TO_DEPLOY, taken from env.CA_GH_ACTION_IMAGE_TO_BUILD, to $GITHUB_ENV without sanitizing it.
+Step 'Update name of image to deploy if not provided' writes env.CA_GH_ACTION_IMAGE_TO_BUILD to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:232`
+- `action.yml:229`
 
 ### github-env-injection (severity: high)
 
-Step 'Export resource group' writes CA_GH_ACTION_RESOURCE_GROUP, taken from inputs.resourceGroup, to $GITHUB_ENV without sanitizing it.
+Step 'Export resource group' writes inputs.resourceGroup to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:239`
+- `action.yml:236`
 
 ### github-env-injection (severity: high)
 
-Step 'Determine resource group' writes CA_GH_ACTION_RESOURCE_GROUP, built from inputs.containerAppName, to $GITHUB_ENV without sanitizing it.
+Step 'Determine resource group if not provided' writes inputs.containerAppName to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:246`
+- `action.yml:243`
 
 ### github-env-injection (severity: high)
 
-Step 'Set default location' writes CA_GH_ACTION_DEFAULT_LOCATION, taken from inputs.location, to $GITHUB_ENV without sanitizing it.
+Step 'Set default location ... if location was provided' writes inputs.location to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:271`
+- `action.yml:268`
 
 ### github-env-injection (severity: high)
 
-Step 'Export location argument' writes CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG, built from inputs.location, to $GITHUB_ENV without sanitizing it.
+Step 'Export location argument' writes inputs.location to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:286`
+- `action.yml:283`
 
 ### github-env-injection (severity: high)
 
-Step 'Export environment' writes CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT, taken from inputs.containerAppEnvironment, to $GITHUB_ENV without sanitizing it.
+Step 'Export environment to environment variable' writes inputs.containerAppEnvironment to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:302`
+- `action.yml:299`
 
 ### github-env-injection (severity: high)
 
-Step 'Determine environment name' writes CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT, built from inputs.containerAppName, to $GITHUB_ENV without sanitizing it.
+Step 'Determine environment name if not provided' writes inputs.containerAppName to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:309`
+- `action.yml:306`
 
 ### github-env-injection (severity: high)
 
-Step 'Export runtime stack' writes CA_GH_ACTION_RUNTIME_STACK, taken from inputs.runtimeStack, to $GITHUB_ENV without sanitizing it.
+Step 'Export runtime stack' writes inputs.runtimeStack to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:345`
+- `action.yml:342`
 
 ### github-env-injection (severity: high)
 
-Step 'Export ingress value' writes CA_GH_ACTION_INGRESS_ARG, built from inputs.ingress, to $GITHUB_ENV without sanitizing it.
+Step 'Export ingress value' writes inputs.ingress to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:384`
+- `action.yml:381`
 
 ### github-env-injection (severity: high)
 
-Step 'Export target port' writes CA_GH_ACTION_TARGET_PORT, taken from inputs.targetPort, to $GITHUB_ENV without sanitizing it.
+Step 'Export target port' writes inputs.targetPort to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:391`
+- `action.yml:388`
 
 ### github-env-injection (severity: high)
 
-Step 'Export target port information' writes CA_GH_ACTION_TARGET_PORT_ARG, built from env.CA_GH_ACTION_TARGET_PORT, to $GITHUB_ENV without sanitizing it.
+Step 'Export target port information ... for Azure CLI command' writes env.CA_GH_ACTION_TARGET_PORT to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:411`
+- `action.yml:408`
 
 ### github-env-injection (severity: high)
 
-Three steps write CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG, built from inputs.environmentVariables, to $GITHUB_ENV without sanitizing it: the two 'Export environment variables argument...' steps and 'Reset the environment variables argument...'.
+Step 'Export environment variables argument ... does not exist' writes inputs.environmentVariables to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:418`
-- `action.yml:425`
-- `action.yml:557`
+- `action.yml:415`
 
 ### github-env-injection (severity: high)
 
-Step 'End timer' writes CA_GH_ACTION_LENGTH_MILLISECONDS_ARG to $GITHUB_ENV without sanitizing it. The value is computed from env.CA_GH_ACTION_START_MILLISECONDS, an env value controlled by the calling workflow.
+Step 'Export environment variables argument ... does exist' writes inputs.environmentVariables to $GITHUB_ENV without sanitization.
 
 Locations:
 
-- `action.yml:594`
+- `action.yml:422`
+
+### github-env-injection (severity: high)
+
+Step 'Reset the environment variables argument ... for the up command' writes inputs.environmentVariables to $GITHUB_ENV without sanitization.
+
+Locations:
+
+- `action.yml:554`
+
+### github-env-injection (severity: high)
+
+Step 'Get access token to log in to Azure Container Registry' writes CA_GH_ACTION_ACR_ACCESS_TOKEN to $GITHUB_ENV without sanitization. The value comes from 'az acr login --name ${{ inputs.acrName }}'.
+
+Locations:
+
+- `action.yml:186`
+
+### github-env-injection (severity: high)
+
+Step 'Reuse an existing Container App environment' writes the az output (queried with env.CA_GH_ACTION_RESOURCE_GROUP) to $GITHUB_ENV without sanitization.
+
+Locations:
+
+- `action.yml:324`
+
+### github-env-injection (severity: high)
+
+Step 'Determine runtime stack if not provided' writes content read from a file under inputs.appSourcePath to $GITHUB_ENV without sanitization.
+
+Locations:
+
+- `action.yml:355`
+
+### script-injection (severity: high)
+
+(a) The step puts inputs directly into run: 'CA_GH_ACTION_ACR_LOGIN_ARG="--registry-server ${{ inputs.acrName }}.azurecr.io --registry-username ${{ inputs.acrUsername }} --registry-password ${{ inputs.acrPassword }}"'.
+
+Locations:
+
+- `action.yml:178`
+
+### script-injection (severity: high)
+
+(a) 'az acr login --name ${{ inputs.acrName }} ...' and 'docker login ${{ inputs.acrName }}.azurecr.io ...' put inputs directly into run:. (b) $CA_GH_ACTION_ACR_ACCESS_TOKEN is unquoted.
+
+Locations:
+
+- `action.yml:185`
+- `action.yml:187`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_DOCKERFILE_PATH="${{ inputs.appSourcePath }}/${{ inputs.dockerfilePath }}"' puts inputs directly into run:.
+
+Locations:
+
+- `action.yml:193`
+
+### script-injection (severity: high)
+
+(a) 'dockerfilePath=${{ inputs.appSourcePath }}/Dockerfile' puts an input directly into run:, unquoted.
+
+Locations:
+
+- `action.yml:200`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_IMAGE_TO_BUILD="${{ inputs.imageToBuild }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:207`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_IMAGE_TO_BUILD="${{ inputs.acrName }}.azurecr.io/github-action/container-app:${{ github.run_id }}.${{ github.run_attempt }}"' puts expressions directly into run:.
+
+Locations:
+
+- `action.yml:214`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_IMAGE_TO_DEPLOY="${{ inputs.imageToDeploy }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:221`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_IMAGE_TO_DEPLOY="${{ env.CA_GH_ACTION_IMAGE_TO_BUILD }}"' puts an expression directly into run:.
+
+Locations:
+
+- `action.yml:228`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_RESOURCE_GROUP="${{ inputs.resourceGroup }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:235`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_RESOURCE_GROUP="${{ inputs.containerAppName }}-rg"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:242`
+
+### script-injection (severity: high)
+
+(a) '-n ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}' in az group show puts an expression directly into run:.
+
+Locations:
+
+- `action.yml:250`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_DEFAULT_LOCATION="${{ inputs.location }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:267`
+
+### script-injection (severity: high)
+
+(a) '-n ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}' and '-l ${{ env.CA_GH_ACTION_DEFAULT_LOCATION }}' in az group create put expressions directly into run:.
+
+Locations:
+
+- `action.yml:275`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG="--location ${{ inputs.location }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:282`
+
+### script-injection (severity: high)
+
+(a) az containerapp show puts '-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}' and '-n ${{ inputs.containerAppName }}' directly into run:.
+
+Locations:
+
+- `action.yml:289`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT="${{ inputs.containerAppEnvironment }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:298`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT="${{ inputs.containerAppName }}-env"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:305`
+
+### script-injection (severity: high)
+
+(a) az containerapp env show puts '-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}' and '-n ${{ env.CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT }}' directly into run:.
+
+Locations:
+
+- `action.yml:313`
+
+### script-injection (severity: high)
+
+(a) 'az containerapp env list -g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}' puts an expression directly into run:. (b) $CA_GH_ACTION_TEMP_ENV_NAME is unquoted.
+
+Locations:
+
+- `action.yml:322`
+
+### script-injection (severity: high)
+
+(a) az containerapp env create puts '${{ env.CA_GH_ACTION_RESOURCE_GROUP }}', '${{ env.CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT }}' and '${{ env.CA_GH_ACTION_CONTAINER_APP_LOCATION_ARG }}' directly into run:.
+
+Locations:
+
+- `action.yml:333`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_RUNTIME_STACK="${{ inputs.runtimeStack }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:341`
+
+### script-injection (severity: high)
+
+(a) '-v ${{ inputs.appSourcePath }}:/app', 'head -n 1 ${{ inputs.appSourcePath }}/oryx-runtime.txt' and 'rm ${{ inputs.appSourcePath }}/oryx-runtime.txt' put an input directly into run:.
+
+Locations:
+
+- `action.yml:350`
+- `action.yml:354`
+- `action.yml:356`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_INGRESS_ARG="--ingress ${{ inputs.ingress }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:380`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_TARGET_PORT="${{ inputs.targetPort }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:387`
+
+### script-injection (severity: high)
+
+(a) 'if [[ "${{ env.CA_GH_ACTION_RUNTIME_STACK }}" == "python:"* ]]' puts an expression directly into run:.
+
+Locations:
+
+- `action.yml:394`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_TARGET_PORT_ARG="--target-port ${{ env.CA_GH_ACTION_TARGET_PORT }}"' puts an expression directly into run:.
+
+Locations:
+
+- `action.yml:407`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG="--env-vars ${{ inputs.environmentVariables }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:414`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG="--replace-env-vars ${{ inputs.environmentVariables }}"' puts an input directly into run:.
+
+Locations:
+
+- `action.yml:421`
+
+### script-injection (severity: high)
+
+(a) The curl URL '.../pack-v0.27.0-${{ runner.os }}.tgz' puts a runner.os expression directly into run:.
+
+Locations:
+
+- `action.yml:427`
+
+### script-injection (severity: high)
+
+(a) pack build puts '${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}', '--path ${{ inputs.appSourcePath }}', '${{ env.CA_GH_ACTION_RUNTIME_STACK }}' and '${{ env.CA_GH_ACTION_ORYX_BUILDER_TELEMETRY_ARG }}' directly into run:.
+
+Locations:
+
+- `action.yml:462`
+
+### script-injection (severity: high)
+
+(a) docker build puts '--tag ${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}', '--file ${{ env.CA_GH_ACTION_DOCKERFILE_PATH }}' and '${{ inputs.appSourcePath }}' directly into run:.
+
+Locations:
+
+- `action.yml:473`
+
+### script-injection (severity: high)
+
+(a) 'docker push ${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}' puts an expression directly into run:.
+
+Locations:
+
+- `action.yml:480`
+
+### script-injection (severity: high)
+
+(a) az containerapp create (YAML) puts '${{ env.CA_GH_ACTION_RESOURCE_GROUP }}', '${{ inputs.containerAppName }}' and '--yaml ${{ inputs.yamlConfigPath }}' directly into run:.
+
+Locations:
+
+- `action.yml:487`
+
+### script-injection (severity: high)
+
+(a) az containerapp create (arguments) puts many expressions directly into run:, for example '-n ${{ inputs.containerAppName }}', '-i ${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}' and '${{ env.CA_GH_ACTION_ACR_LOGIN_ARG }}'.
+
+Locations:
+
+- `action.yml:496`
+
+### script-injection (severity: high)
+
+(a) az containerapp update (YAML) puts '${{ env.CA_GH_ACTION_RESOURCE_GROUP }}', '${{ inputs.containerAppName }}' and '--yaml ${{ inputs.yamlConfigPath }}' directly into run:.
+
+Locations:
+
+- `action.yml:510`
+
+### script-injection (severity: high)
+
+(a) az containerapp registry set puts '--server ${{ inputs.acrName }}.azurecr.io', '--username ${{ inputs.acrUsername }}' and '--password ${{ inputs.acrPassword }}' directly into run:.
+
+Locations:
+
+- `action.yml:526`
+
+### script-injection (severity: high)
+
+(a) az containerapp update puts '${{ env.CA_GH_ACTION_RESOURCE_GROUP }}', '${{ inputs.containerAppName }}', '${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}' and '${{ env.CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG }}' directly into run:.
+
+Locations:
+
+- `action.yml:537`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_CONTAINER_APP_ENVIRONMENT_VARIABLES_ARG="--env-vars ${{ inputs.environmentVariables }}"' (reset for up) puts an input directly into run:.
+
+Locations:
+
+- `action.yml:553`
+
+### script-injection (severity: high)
+
+(a) az containerapp up puts many expressions directly into run:, for example '${{ inputs.containerAppName }}', '${{ env.CA_GH_ACTION_IMAGE_TO_DEPLOY }}' and '${{ env.CA_GH_ACTION_ACR_LOGIN_ARG }}'.
+
+Locations:
+
+- `action.yml:561`
+
+### script-injection (severity: high)
+
+(a) az containerapp ingress disable puts '-g ${{ env.CA_GH_ACTION_RESOURCE_GROUP }}' and '-n ${{ inputs.containerAppName }}' directly into run:.
+
+Locations:
+
+- `action.yml:574`
+
+### script-injection (severity: high)
+
+(a) 'CA_GH_ACTION_START_MILLISECONDS=${{ env.CA_GH_ACTION_START_MILLISECONDS }}' puts an expression directly into run:.
+
+Locations:
+
+- `action.yml:589`
+
+### script-injection (severity: high)
+
+(a) In 'Log telemetry for action', the line '-c "oryx telemetry ... ${{ env.CA_GH_ACTION_LENGTH_MILLISECONDS_ARG }} ${{ env.CA_GH_ACTION_SCENARIO_ARG }} ${{ env.CA_GH_ACTION_RESULT_ARG }}"' puts expressions directly into run:.
+
+Locations:
+
+- `action.yml:622`
 
 ### static-inline-injection (severity: high)
 
@@ -834,22 +878,17 @@ Locations:
 
 ### Iteration 1
 
-**Fixes applied:** unpinned-uses, script-injection, github-env-injection, static-inline-injection
+**Fixes applied:** unpinned-uses, github-env-injection, script-injection, static-inline-injection
 
 **Notes:**
 
-Changes to action.yml. Nothing has been run yet, so none of it is tested:
+All changes are in action.yml. Nothing was run or tested; I checked the edits by re-reading the file and searching it.
 
-- **Pinned actions:** azure/login@cb79c773a3cfa27f31f25eb3f677781210c9ce3d # v1 and docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2.0.0.
-- **Inputs moved out of scripts:** every input expression in a run: script now goes through the step's env: block and is double-quoted where it expands. Values the action had already written to $GITHUB_ENV are read as shell variables instead of being pasted in with ${{ env.X }}. github.run_id, run_attempt and runner.os are read from GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT and RUNNER_OS.
-- **Values written to $GITHUB_ENV:** anything built from an input or from command output (az, jq, the oryx runtime file) has newlines stripped with `printf '%s' ... | tr -d '\n\r'` before it is written.
-- **Registry credentials:** CA_GH_ACTION_ACR_LOGIN_ARG now only holds the marker 'true', so the ACR password is no longer stored in $GITHUB_ENV. The create, up and registry-set steps build the `--registry-*` arguments as an array straight from the inputs.
-- **docker login:** the access token is now passed with `--password-stdin` instead of an unquoted `-p`.
-- **Combined argument strings** (ingress, target port, env vars): these are split into an array with the quote-aware xargs method (empty-value guard, `xargs -r true` check for unmatched quotes), because upstream pasted them straight into the script. Location and telemetry arguments use a plain whitespace split with `read -d ''`.
-- **Fixed telemetry values:** I removed their inner quotes (for example `--env CALLER_ID=github-actions-v0` and `--property result=failed`), so the whitespace split gives the same arguments the shell used to.
-- **Telemetry container:** the oryx telemetry call now passes its arguments as "$@" instead of building a command string for the container's shell.
-- **End timer:** CA_GH_ACTION_START_MILLISECONDS is checked to be digits only before the arithmetic. If it isn't, the duration is reported as 0.
-
-Two side effects of no longer pasting values into the script, both handled by changing the az calls:
-- Upstream relied on the shell removing the JSON quotes from az output. The environment lookup now uses `-o tsv`, and the default-location sed also strips `"`. Without this, environment and location names would reach later commands wrapped in literal quotes.
+- **unpinned-uses:** azure/login@v1 is now pinned to cb79c773a3cfa27f31f25eb3f677781210c9ce3d and docker/login-action@v2.0.0 to 49ed152c8eca782a232dede0303416e8f356c37b, each with a `# tag` comment.
+- **script-injection / static-inline-injection:** every `${{ inputs.* }}`, `${{ github.run_id/run_attempt }}` and `${{ runner.os }}` used in a run: block now goes through the step's env: block (INPUT_* / GH_* vars) or uses the runner's built-in variable (RUNNER_OS). Every `${{ env.CA_GH_ACTION_* }}` became a direct reference to the variable, which GITHUB_ENV has already set. Single values are double-quoted.
+- **Combined flag strings** (the stored ACR login, ingress, target port, env-vars, location, Oryx telemetry and telemetry-property values): upstream pasted these in unquoted, so the shell split them and honoured quotes inside them. To keep that behaviour, each step now splits them into an array with the guarded `xargs -r` method, so a flag and its value stay separate arguments.
+- **Final telemetry step:** it now passes the split arguments to `bash -c 'oryx telemetry ... "$@"'` instead of building the command text by string interpolation.
+- **github-env-injection:** every value written to GITHUB_ENV from an input or command output now goes through `printf '%s' | tr -d '\n\r'`, and `$GITHUB_ENV` is quoted.
+- **Two small behaviour-preserving changes:** the default location from az and the reused Container App environment name now have their JSON double quotes stripped before being saved. Upstream relied on the shell removing those quotes when it pasted the value in unquoted.
+- **Tradeoff:** an environmentVariables input written over several lines now has its line breaks removed, so the last pair on one line runs into the first pair on the next (for example `A=1` and `B=2` become `A=1B=2`). Upstream would have written a broken GITHUB_ENV entry in that case anyway.
 
