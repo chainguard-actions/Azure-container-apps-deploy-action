@@ -179,12 +179,12 @@ runs:
 
     - name: Log in to Azure
       if: ${{ inputs.azureCredentials != '' }}
-      uses: azure/login@cb79c773a3cfa27f31f25eb3f677781210c9ce3d # v1
+      uses: chainguard-actions/azure-login@89eb9dbb2b69ddd12f585eb08e1ed59dc567cfd8 # v1
       with:
         creds: ${{ inputs.azureCredentials }}
 
     - name: Log in to Azure Container Registry
-      uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2.0.0
+      uses: chainguard-actions/docker-login-action@b16c9da7702b7b40280a32faa07c5682ca22e14f # v2.0.0
       if: ${{ inputs.acrName != '' && inputs.acrUsername != '' && inputs.acrPassword != '' }}
       with:
         registry: ${{ inputs.acrName }}.azurecr.io
